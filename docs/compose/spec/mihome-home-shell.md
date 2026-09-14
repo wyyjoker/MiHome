@@ -1,9 +1,9 @@
 ---
 feature: mihome-home-shell
-status: in-progress
+status: delivered
 updated: 2026-09-14
 branch: main
-commits: 3fff5f8..5b04ecc
+commits: 3fff5f8..df3c9d2
 ---
 
 # 米家新版家庭首页壳（Phase 1）
