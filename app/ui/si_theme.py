@@ -533,6 +533,34 @@ QLabel#placeholderSub {
     color: $TEXT_SECONDARY;
     background: transparent;
 }
+
+QFrame#homeBanner {
+    background: $BANNER_A;
+    border: 1px solid $LINE;
+    border-radius: 18px;
+}
+
+QFrame#attentionRow {
+    background: $SURFACE;
+    border-radius: 12px;
+}
+
+QFrame#commonDeviceCard {
+    background: $CARD;
+    border: 1px solid $LINE;
+    border-radius: 14px;
+}
+
+QFrame#commonDeviceCard:hover {
+    background: $CARD_HOVER;
+    border-color: $CARD_BORDER_HOVER;
+}
+
+QFrame#climateCard {
+    background: $CARD;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 16px;
+}
 """)
 
 

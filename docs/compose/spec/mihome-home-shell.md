@@ -1,6 +1,6 @@
 ---
 feature: mihome-home-shell
-status: delivered
+status: in-progress
 updated: 2026-09-14
 branch: main
 commits: 3fff5f8..5b04ecc
@@ -12,14 +12,14 @@ commits: 3fff5f8..5b04ecc
 
 **What was built** — 米家新版应用壳已合入 `MiHome-Windows` 的 `main`（`5b04ecc`）：左侧导航、暖米色信息流家庭首页、右侧房间面板与空调深控。旧设备网格迁入「设备」页；设置支持问候称呼与 `home_shell` 回退。同提交已推送至 `fork/main`（wyyjoker/MiHome）。
 
-**Verification** — `tests.smoke_test` PASS；`tests.theme_test` PASS；应用已自 `E:\MiHome\MiHome-Windows` 启动（仅 DPI 警告）。
+**Verification** — `tests.smoke_test` PASS；`tests.theme_test` PASS；应用已自 `E:\MiHome\MiHome-Windows` 启动（仅 DPI 警告）。Phase 1.1：offscreen 首页+空调深控构造 PASS，smoke/theme 再跑 PASS。
 
 **Journey log** —
 1. 本机原仅 Python 3.8，winget 安装 3.12 后才能跑项目。
 2. 沙箱禁止 `git worktree add` / `git merge`，用独立 clone + patch 落回 main。
 3. 批量开关轮询改为末尾统一刷新，避免 O(n) 重建首页。
 4. 浅色调色板改为暖米色，主题回归期望值同步更新。
-5. 常用设备 `QGridLayout.addWidget` 需 row/col，已改垂直列表。
+5. Phase 1.1：房间卡封面叠字、常用设备双列开关、空调模式/风速按截图深化；空调读值补 fan-level。
 
 ## [S1] Problem
 
@@ -162,3 +162,8 @@ commits: 3fff5f8..5b04ecc
 - [x] T7: 设备页迁入与占位导航页 — acceptance: 「设备」复用旧网格；场景等 5 项显示占位；设置仍可打开 (covers: S2.5)
 - [x] T8: 设置项与回退开关 — acceptance: `display_name`、`home_shell_enabled` 可持久化；关闭后可回退旧主窗结构 (covers: S2.7)
 - [x] T9: 回归冒烟与启动路径 — acceptance: `python -m tests.smoke_test` 通过；无登录/有登录启动不崩；托盘/语音入口不因壳重构失效 (covers: S2.8)
+
+### Phase 1.1 视觉深化（2026-09-14）
+
+- [x] T10: 首页视觉对齐截图 — acceptance: 问候横幅加高、状态 chips 彩色图标、房间卡封面叠字+类型徽章、常用设备双列开关卡 (covers: S2.3)
+- [x] T11: 空调深控卡对齐截图 — acceptance: 大字设定温度、模式 2×2 图标瓦片、风速档位行、运行中状态点；读值含 fan-level (covers: S2.4)

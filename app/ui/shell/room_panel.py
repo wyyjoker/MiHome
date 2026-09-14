@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -31,6 +32,28 @@ _KIND_META = (
     ("other", "mdi.dots-horizontal-circle-outline", "其他"),
 )
 
+_MODE_ICON = {
+    "制冷": "mdi.snowflake",
+    "cool": "mdi.snowflake",
+    "制热": "mdi.fire",
+    "heat": "mdi.fire",
+    "自动": "mdi.autorenew",
+    "auto": "mdi.autorenew",
+    "除湿": "mdi.water",
+    "dry": "mdi.water",
+    "送风": "mdi.fan",
+    "fan": "mdi.fan",
+    "通风": "mdi.fan",
+}
+
+
+def _mode_icon(text: str) -> str:
+    key = str(text).strip().lower()
+    for k, icon in _MODE_ICON.items():
+        if k in key:
+            return icon
+    return "mdi.tune-variant"
+
 
 class RoomPanel(QFrame):
     """房间详情侧栏。业务读写由 MainWindow / JobExecutor 承担。"""
@@ -43,7 +66,7 @@ class RoomPanel(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("rightPanel")
-        self.setFixedWidth(340)
+        self.setFixedWidth(360)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -51,9 +74,9 @@ class RoomPanel(QFrame):
 
         header = QFrame()
         header_lay = QHBoxLayout(header)
-        header_lay.setContentsMargins(16, 14, 12, 14)
+        header_lay.setContentsMargins(18, 16, 12, 16)
         self._title = QLabel("房间")
-        self._title.setFont(QFont("Microsoft YaHei UI", 14, QFont.Weight.DemiBold))
+        self._title.setFont(QFont("Microsoft YaHei UI", 15, QFont.Weight.DemiBold))
         self._title.setStyleSheet(
             f"color: {SiColors.TEXT_PRIMARY}; background: transparent;")
         header_lay.addWidget(self._title, 1)
@@ -137,13 +160,19 @@ class RoomPanel(QFrame):
             items = groups.get(key)
             if not items:
                 continue
+            # 空调从分类列表抽出，放到深控卡，避免重复一行空壳
+            if key == "climate" and any(d.online for d in items):
+                climate = next(d for d in items if d.online)
+                self._body_lay.addWidget(self._climate_card(climate))
+                rest = [d for d in items if d.did != climate.did]
+                if rest:
+                    self._body_lay.addWidget(self._section_header(icon, label, rest))
+                    for d in rest:
+                        self._body_lay.addWidget(self._device_row(d))
+                continue
             self._body_lay.addWidget(self._section_header(icon, label, items))
             for d in items:
                 self._body_lay.addWidget(self._device_row(d))
-
-        climate = next((d for d in groups.get("climate", []) if d.online), None)
-        if climate is not None:
-            self._body_lay.addWidget(self._climate_card(climate))
 
         self._body_lay.addStretch(1)
 
@@ -201,21 +230,29 @@ class RoomPanel(QFrame):
 
     def _climate_card(self, device: DeviceInfo) -> QWidget:
         card = QFrame()
-        card.setObjectName("homeSectionCard")
+        card.setObjectName("climateCard")
         lay = QVBoxLayout(card)
-        lay.setContentsMargins(16, 14, 16, 14)
-        lay.setSpacing(10)
+        lay.setContentsMargins(18, 16, 18, 18)
+        lay.setSpacing(14)
 
         head = QHBoxLayout()
-        name = QLabel(device.name)
-        name.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.DemiBold))
-        name.setStyleSheet(f"color: {SiColors.TEXT_PRIMARY}; background: transparent;")
-        head.addWidget(name, 1)
-        running = QLabel("运行中" if self._known_power.get(device.did) else "已关闭")
+        name_col = QVBoxLayout()
+        name_col.setSpacing(2)
+        name = QLabel(f"{self._room_name}{device.name}" if self._room_name else device.name)
+        name.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.DemiBold))
+        name.setStyleSheet(
+            f"color: {SiColors.TEXT_PRIMARY}; background: transparent;")
+        name_col.addWidget(name)
+        on = self._known_power.get(device.did) is True
+        running = QLabel("●  运行中" if on else "○  已关闭")
         running.setStyleSheet(
-            f"color: {SiColors.THEME if self._known_power.get(device.did) else SiColors.TEXT_MUTED};"
-            f" background: transparent;")
-        head.addWidget(running)
+            f"color: {SiColors.THEME if on else SiColors.TEXT_MUTED};"
+            f" background: transparent; font-size: 9pt;")
+        name_col.addWidget(running)
+        head.addLayout(name_col, 1)
+        more = QLabel()
+        more.setPixmap(qta.icon("mdi.dots-horizontal", color=SiColors.TEXT_MUTED).pixmap(18, 18))
+        head.addWidget(more)
         lay.addLayout(head)
 
         detail = self._climate_detail if self._climate_did == device.did else None
@@ -233,57 +270,94 @@ class RoomPanel(QFrame):
         target = _num("target-temperature", "target_temperature")
         current = _num("temperature")
         humidity = _num("relative-humidity", "relative_humidity", "humidity")
+        fan_level = values.get("fan-level") or values.get("fan_level") or values.get("wind-speed")
 
-        temp_row = QHBoxLayout()
+        # 大温度区
+        temp_wrap = QWidget()
+        temp_lay = QHBoxLayout(temp_wrap)
+        temp_lay.setContentsMargins(0, 4, 0, 4)
         minus = QPushButton("−")
-        minus.setFixedSize(40, 40)
+        minus.setFixedSize(42, 42)
         minus.setStyleSheet(self._circle_btn_qss())
         minus.setCursor(Qt.CursorShape.PointingHandCursor)
         plus = QPushButton("+")
-        plus.setFixedSize(40, 40)
+        plus.setFixedSize(42, 42)
         plus.setStyleSheet(self._circle_btn_qss())
         plus.setCursor(Qt.CursorShape.PointingHandCursor)
-        temp_label = QLabel(f"{target:.0f}°" if target is not None else "--°")
-        temp_label.setFont(QFont("Microsoft YaHei UI", 28, QFont.Weight.DemiBold))
+
+        center = QVBoxLayout()
+        center.setSpacing(0)
+        label = QLabel("设定温度")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setStyleSheet(
+            f"color: {SiColors.TEXT_MUTED}; background: transparent; font-size: 9pt;")
+        center.addWidget(label)
+        temp_label = QLabel(f"{target:.1f}°C" if target is not None else "--°C")
+        temp_label.setFont(QFont("Microsoft YaHei UI", 30, QFont.Weight.DemiBold))
         temp_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         temp_label.setStyleSheet(
             f"color: {SiColors.TEXT_PRIMARY}; background: transparent;")
-        temp_row.addWidget(minus)
-        temp_row.addWidget(temp_label, 1)
-        temp_row.addWidget(plus)
-        lay.addLayout(temp_row)
+        center.addWidget(temp_label)
+        temp_lay.addWidget(minus)
+        temp_lay.addLayout(center, 1)
+        temp_lay.addWidget(plus)
+        lay.addWidget(temp_wrap)
 
-        if current is not None or humidity is not None:
-            parts = []
-            if current is not None:
-                parts.append(f"室内 {current:.0f}°")
-            if humidity is not None:
-                parts.append(f"湿度 {humidity:.0f}%")
-            meta = QLabel("  ".join(parts))
+        meta_parts = []
+        if current is not None:
+            meta_parts.append(f"室内 {current:.0f}°")
+        if humidity is not None:
+            meta_parts.append(f"湿度 {humidity:.0f}%")
+        if fan_level is not None:
+            try:
+                meta_parts.append(f"风速 {int(float(fan_level))} 档")
+            except (TypeError, ValueError):
+                meta_parts.append(f"风速 {fan_level}")
+        if meta_parts:
+            meta = QLabel("  ".join(meta_parts))
             meta.setAlignment(Qt.AlignmentFlag.AlignCenter)
             meta.setStyleSheet(
                 f"color: {SiColors.TEXT_SECONDARY}; background: transparent;")
             lay.addWidget(meta)
 
+        # 模式 2x2
         mode_prop = self._find_prop(detail, ("mode", "air-conditioner-mode"))
         if mode_prop is not None and mode_prop.value_list:
-            modes = QHBoxLayout()
-            modes.setSpacing(8)
-            for item in mode_prop.value_list[:4]:
-                desc = (
+            lay.addWidget(self._label_row("模式"))
+            grid = QGridLayout()
+            grid.setSpacing(8)
+            for i, item in enumerate(mode_prop.value_list[:4]):
+                desc = str(
                     item.get("description")
                     or item.get("desc_zh_cn")
-                    or str(item.get("value"))
+                    or item.get("value")
                 )
-                btn = QPushButton(str(desc))
+                grid.addWidget(self._mode_tile(device.did, mode_prop.name, item.get("value"), desc),
+                               i // 2, i % 2)
+            lay.addLayout(grid)
+
+        # 风速
+        fan_prop = self._find_prop(
+            detail, ("fan-level", "fan_level", "wind-speed", "wind_speed"))
+        if fan_prop is not None and fan_prop.value_list:
+            lay.addWidget(self._label_row("风速"))
+            fan_row = QHBoxLayout()
+            fan_row.setSpacing(8)
+            for item in fan_prop.value_list[:4]:
+                desc = str(
+                    item.get("description")
+                    or item.get("desc_zh_cn")
+                    or item.get("value")
+                )
+                btn = QPushButton(desc)
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.setStyleSheet(self._mode_btn_qss())
                 value = item.get("value")
                 btn.clicked.connect(
-                    lambda _=False, p=mode_prop.name, v=value:
+                    lambda _=False, p=fan_prop.name, v=value:
                     self.prop_write_requested.emit(device.did, p, v))
-                modes.addWidget(btn)
-            lay.addLayout(modes)
+                fan_row.addWidget(btn)
+            lay.addLayout(fan_row)
 
         step, tmin, tmax = 1.0, 16.0, 30.0
         tprop = self._find_prop(detail, ("target-temperature", "target_temperature"))
@@ -300,22 +374,52 @@ class RoomPanel(QFrame):
         plus.clicked.connect(lambda: _bump(step))
 
         power_btn = QPushButton(
-            "关闭空调" if self._known_power.get(device.did) else "开启空调")
+            "关闭空调" if on else "开启空调")
         power_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        power_btn.setFixedHeight(36)
+        power_btn.setFixedHeight(40)
         power_btn.setStyleSheet(
             f"QPushButton {{ background: {SiColors.SURFACE}; border: 1px solid {SiColors.LINE};"
-            f" border-radius: 10px; color: {SiColors.TEXT_PRIMARY}; }}"
+            f" border-radius: 12px; color: {SiColors.TEXT_PRIMARY}; font-weight: 600; }}"
             f"QPushButton:hover {{ border-color: {SiColors.THEME}; color: {SiColors.THEME}; }}")
         power_btn.clicked.connect(lambda: self.power_toggled.emit(device.did))
         lay.addWidget(power_btn)
         return card
 
+    def _label_row(self, text: str) -> QWidget:
+        lb = QLabel(text)
+        lb.setStyleSheet(
+            f"color: {SiColors.TEXT_MUTED}; background: transparent; font-size: 9pt;")
+        return lb
+
+    def _mode_tile(self, did: str, prop: str, value, desc: str) -> QPushButton:
+        btn = QPushButton()
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setMinimumHeight(64)
+        lay = QVBoxLayout(btn)
+        lay.setContentsMargins(8, 10, 8, 10)
+        lay.setSpacing(6)
+        ic = QLabel()
+        ic.setPixmap(qta.icon(_mode_icon(desc), color=SiColors.THEME).pixmap(22, 22))
+        ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        text = QLabel(desc)
+        text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        text.setStyleSheet(
+            f"color: {SiColors.TEXT_SECONDARY}; background: transparent;")
+        lay.addWidget(ic)
+        lay.addWidget(text)
+        btn.setStyleSheet(
+            f"QPushButton {{ background: {SiColors.SURFACE}; border: 1px solid {SiColors.LINE};"
+            f" border-radius: 12px; }}"
+            f"QPushButton:hover {{ border-color: {SiColors.THEME}; background: {SiColors.CARD_HOVER}; }}")
+        btn.clicked.connect(
+            lambda _=False, p=prop, v=value: self.prop_write_requested.emit(did, p, v))
+        return btn
+
     @staticmethod
     def _circle_btn_qss() -> str:
         return (
-            f"QPushButton {{ background: {SiColors.SURFACE}; border: none; border-radius: 20px;"
-            f" color: {SiColors.TEXT_PRIMARY}; font-size: 16pt; }}"
+            f"QPushButton {{ background: {SiColors.SURFACE}; border: none; border-radius: 21px;"
+            f" color: {SiColors.TEXT_PRIMARY}; font-size: 18pt; }}"
             f"QPushButton:hover {{ background: {SiColors.BTN_HOVER}; }}"
         )
 
@@ -323,7 +427,7 @@ class RoomPanel(QFrame):
     def _mode_btn_qss() -> str:
         return (
             f"QPushButton {{ background: {SiColors.SURFACE}; border: 1px solid {SiColors.LINE};"
-            f" border-radius: 8px; padding: 6px 10px; color: {SiColors.TEXT_SECONDARY}; }}"
+            f" border-radius: 10px; padding: 8px 10px; color: {SiColors.TEXT_SECONDARY}; }}"
             f"QPushButton:hover {{ border-color: {SiColors.THEME}; color: {SiColors.THEME}; }}"
         )
 

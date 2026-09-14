@@ -379,15 +379,19 @@ class MainWindow(QMainWindow):
 
         def _load():
             detail = self._service.device_detail(did)
-            names = ["target-temperature", "temperature", "relative-humidity", "mode"]
-            # 兼容下划线命名
-            extra = ["target_temperature", "humidity", "air-conditioner-mode"]
+            names = [
+                "target-temperature", "temperature", "relative-humidity",
+                "mode", "fan-level", "wind-speed",
+            ]
+            extra = [
+                "target_temperature", "humidity", "air-conditioner-mode",
+                "fan_level", "wind_speed",
+            ]
             values = {}
             try:
                 values = self._service.read_props(did, names + extra)
             except Exception:
                 values = {}
-            # 清理 None 键噪音
             values = {k: v for k, v in values.items() if v is not None or k in names}
             return detail, values
 
@@ -437,6 +441,7 @@ class MainWindow(QMainWindow):
             names = [
                 "target-temperature", "temperature", "relative-humidity",
                 "target_temperature", "humidity", "mode",
+                "fan-level", "fan_level", "wind-speed", "wind_speed",
             ]
             return self._service.read_props(did, names)
 
