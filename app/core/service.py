@@ -29,7 +29,7 @@ from mijiaAPI.devices import DevAction, DevProp
 from mijiaAPI.miutils import generate_enc_params, gen_nonce, get_signed_nonce
 
 from . import icon_store
-from .models import ActionInfo, DeviceDetail, DeviceInfo, PropInfo
+from .models import ActionInfo, DeviceDetail, DeviceInfo, PropInfo, SceneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +151,38 @@ class MijiaService:
                 online=bool(d.get("isOnline", False)),
             ))
         return sorted(result, key=lambda x: (x.home_name, x.room_name, x.name))
+
+    # ---------- 手动场景 ----------
+
+    def list_scenes(self) -> list[SceneInfo]:
+        """拉取全部家庭的手动场景（米家 App → 智能 → 手动场景）。"""
+        try:
+            homes = self._api.get_homes_list()
+            home_names = {str(h.get("id", "")): h.get("name", "") for h in homes}
+            raw = self._api.get_scenes_list()
+        except Exception as exc:
+            raise _wrap_error(exc, "获取场景列表失败") from exc
+        scenes: list[SceneInfo] = []
+        for item in raw or []:
+            home_id = str(item.get("home_id", "") or "")
+            scenes.append(SceneInfo(
+                scene_id=str(item.get("scene_id", "") or ""),
+                name=str(item.get("name", "") or "未命名场景"),
+                home_id=home_id,
+                home_name=home_names.get(home_id, ""),
+            ))
+        scenes = [s for s in scenes if s.scene_id]
+        return sorted(scenes, key=lambda s: (s.home_name, s.name))
+
+    def run_scene(self, scene_id: str, home_id: str) -> bool:
+        """执行手动场景；返回上游布尔结果。"""
+        try:
+            ok = bool(self._api.run_scene(scene_id, home_id))
+        except Exception as exc:
+            raise _wrap_error(exc, "执行场景失败") from exc
+        if not ok:
+            raise ServiceError("场景执行失败，请稍后重试")
+        return True
 
     # ---------- 设备控制 ----------
 

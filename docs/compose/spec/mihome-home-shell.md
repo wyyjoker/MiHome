@@ -12,14 +12,14 @@ commits: 3fff5f8..5b04ecc
 
 **What was built** — 米家新版应用壳已合入 `MiHome-Windows` 的 `main`（`5b04ecc`）：左侧导航、暖米色信息流家庭首页、右侧房间面板与空调深控。旧设备网格迁入「设备」页；设置支持问候称呼与 `home_shell` 回退。同提交已推送至 `fork/main`（wyyjoker/MiHome）。
 
-**Verification** — `tests.smoke_test` PASS；`tests.theme_test` PASS；应用已自 `E:\MiHome\MiHome-Windows` 启动（仅 DPI 警告）。Phase 1.1：offscreen 首页+空调深控构造 PASS，smoke/theme 再跑 PASS。
+**Verification** — `tests.smoke_test` PASS；`tests.theme_test` PASS。Phase 1.2：场景页 offscreen 构造 PASS；深色 NAV_ACTIVE/封面文字 PASS。
 
 **Journey log** —
 1. 本机原仅 Python 3.8，winget 安装 3.12 后才能跑项目。
 2. 沙箱禁止 `git worktree add` / `git merge`，用独立 clone + patch 落回 main。
 3. 批量开关轮询改为末尾统一刷新，避免 O(n) 重建首页。
 4. 浅色调色板改为暖米色，主题回归期望值同步更新。
-5. Phase 1.1：房间卡封面叠字、常用设备双列开关、空调模式/风速按截图深化；空调读值补 fan-level。
+5. Phase 1.2：上游 `get_scenes_list/run_scene` 即可支撑手动场景页，无需占位。
 
 ## [S1] Problem
 
@@ -144,7 +144,7 @@ commits: 3fff5f8..5b04ecc
 
 ## [S3] Out of Scope
 
-- 场景、自动化、安防、能耗、消息的真实业务与云端接口  
+- 自动化、安防、能耗、消息的真实业务与云端接口（场景手动执行已接入）
 - 真实在家人数、室外天气、空气质量  
 - 实景房间照片下载/自定义上传  
 - 完整深色米家壳像素级还原  
@@ -167,3 +167,8 @@ commits: 3fff5f8..5b04ecc
 
 - [x] T10: 首页视觉对齐截图 — acceptance: 问候横幅加高、状态 chips 彩色图标、房间卡封面叠字+类型徽章、常用设备双列开关卡 (covers: S2.3)
 - [x] T11: 空调深控卡对齐截图 — acceptance: 大字设定温度、模式 2×2 图标瓦片、风速档位行、运行中状态点；读值含 fan-level (covers: S2.4)
+
+### Phase 1.2 场景与深色适配（2026-09-14）
+
+- [x] T12: 场景页接入手动场景 — acceptance: `service.list_scenes/run_scene` 可用；场景页列出并执行；成功后回读开关 (covers: S2.5)
+- [x] T13: 深色壳可读性 — acceptance: 深色 NAV_ACTIVE 可区分选中；房间卡封面文字主题无关可读 (covers: S2.2)

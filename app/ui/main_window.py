@@ -148,6 +148,8 @@ class MainWindow(QMainWindow):
         self._room_panel: RoomPanel | None = None
         self._placeholder_pages: dict[str, QWidget] = {}
         self._shell_busy_power: set[str] = set()
+        self._scenes_page = None
+        self._scenes_loaded = False
         # 产品页名称回退的异步查询防重入
         self._localize_busy = False
         # DPI 变化时恢复期望逻辑尺寸：Qt 在缩放变化后保持物理尺寸
@@ -323,7 +325,13 @@ class MainWindow(QMainWindow):
 
         self._content_stack.addWidget(devices_host)
 
-        for key in ("scenes", "automation", "security", "energy", "messages"):
+        from app.ui.shell.scenes_page import ScenesPage
+        self._scenes_page = ScenesPage()
+        self._scenes_page.refresh_requested.connect(self.load_scenes)
+        self._scenes_page.run_requested.connect(self._on_run_scene)
+        self._content_stack.addWidget(self._scenes_page)
+
+        for key in ("automation", "security", "energy", "messages"):
             page = PlaceholderPage(key)
             self._placeholder_pages[key] = page
             self._content_stack.addWidget(page)
@@ -351,10 +359,46 @@ class MainWindow(QMainWindow):
         if key in order:
             self._content_stack.setCurrentIndex(order.index(key))
         self._nav.set_current(key)
+        if key == "scenes" and not getattr(self, "_scenes_loaded", False):
+            self.load_scenes()
         if key != "rooms" and key != "home":
             # 离开首页/房间时收起右栏，避免遮挡
             if self._room_panel is not None:
                 self._room_panel.hide()
+
+    def load_scenes(self) -> None:
+        self._scenes_loaded = True
+        self._jobs.submit(
+            self._service.list_scenes,
+            on_success=self._on_scenes_loaded,
+            on_error=lambda exc: (
+                logger.warning("加载场景失败: %s", exc),
+                Toast.info(self, f"加载场景失败：{exc}", 4000),
+            ),
+        )
+
+    def _on_scenes_loaded(self, scenes) -> None:
+        if self._scenes_page is not None:
+            self._scenes_page.set_scenes(scenes)
+
+    def _on_run_scene(self, scene_id: str, home_id: str) -> None:
+        if self._scenes_page is not None:
+            self._scenes_page.set_busy(scene_id, True)
+        self._jobs.submit(
+            lambda: self._service.run_scene(scene_id, home_id),
+            on_success=lambda _=None, sid=scene_id: self._on_scene_done(sid, True),
+            on_error=lambda err, sid=scene_id: self._on_scene_done(sid, False, err),
+        )
+
+    def _on_scene_done(self, scene_id: str, ok: bool, error: Exception | None = None) -> None:
+        if self._scenes_page is not None:
+            self._scenes_page.set_busy(scene_id, False)
+        if ok:
+            Toast.info(self, "场景已执行", 2500)
+            # 场景可能改了开关，轻量回读一次
+            self._refresh_power_states(force=True)
+        else:
+            Toast.info(self, f"执行失败：{error}", 4000)
 
     def _on_shell_room_selected(self, room_name: str) -> None:
         devices = [
@@ -793,6 +837,8 @@ class MainWindow(QMainWindow):
         self._update_tray_devices()
         self._load_card_icons()
         self._update_shell_panels()
+        if self._shell_enabled:
+            self.load_scenes()
 
     # ---------- 设备图标 ----------
 

@@ -174,18 +174,20 @@ class _RoomCard(QFrame):
         ov = QVBoxLayout(overlay)
         ov.setContentsMargins(14, 12, 14, 12)
         ov.addStretch(1)
+        # 封面为浅色渐变，深浅主题都用深字保证可读
+        cover_fg = "#2B2A26"
         name = QLabel(room.name)
         name.setStyleSheet(
-            "color: #2B2A26; background: transparent;"
-            " font-size: 14pt; font-weight: 700;")
+            f"color: {cover_fg}; background: transparent;"
+            f" font-size: 14pt; font-weight: 700;")
         ov.addWidget(name)
 
         metric = room.metric_texts(metrics)
         temp_line = metric[0] if metric else f"{room.online} 在线"
         temp = QLabel(temp_line)
         temp.setStyleSheet(
-            "color: #2B2A26; background: transparent;"
-            " font-size: 11pt; font-weight: 600; opacity: 0.9;")
+            f"color: {cover_fg}; background: transparent;"
+            f" font-size: 11pt; font-weight: 600;")
         ov.addWidget(temp)
         overlay.raise_()
         root.addWidget(cover_host)

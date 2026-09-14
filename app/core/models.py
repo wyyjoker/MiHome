@@ -63,3 +63,14 @@ def is_speaker(device: DeviceInfo) -> bool:
     wifispeaker）同样具备音量/静音与文本指令能力。
     """
     return "wifispeaker" in device.model
+
+
+@dataclass
+class SceneInfo:
+    """手动场景列表条目（米家 App「智能 → 手动场景」）。"""
+
+    scene_id: str
+    name: str
+    home_id: str
+    home_name: str = ""
+
