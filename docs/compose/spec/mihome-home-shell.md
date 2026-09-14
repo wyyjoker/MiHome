@@ -12,14 +12,14 @@ commits: 3fff5f8..5b04ecc
 
 **What was built** — 米家新版应用壳已合入 `MiHome-Windows` 的 `main`（`5b04ecc`）：左侧导航、暖米色信息流家庭首页、右侧房间面板与空调深控。旧设备网格迁入「设备」页；设置支持问候称呼与 `home_shell` 回退。同提交已推送至 `fork/main`（wyyjoker/MiHome）。
 
-**Verification** — `tests.smoke_test` PASS；`tests.theme_test` PASS。Phase 1.2：场景页 offscreen 构造 PASS；深色 NAV_ACTIVE/封面文字 PASS。
+**Verification** — Phase 1.4：offscreen 构造 PASS；`smoke_test` PASS；`theme_test` PASS。
 
 **Journey log** —
 1. 本机原仅 Python 3.8，winget 安装 3.12 后才能跑项目。
 2. 沙箱禁止 `git worktree add` / `git merge`，用独立 clone + patch 落回 main。
 3. 批量开关轮询改为末尾统一刷新，避免 O(n) 重建首页。
 4. 浅色调色板改为暖米色，主题回归期望值同步更新。
-5. Phase 1.2：上游 `get_scenes_list/run_scene` 即可支撑手动场景页，无需占位。
+5. Phase 1.4：侧栏用户/时钟/消息角标、关注 2×2、常用设备状态文案、右栏房间横幅与灯光全开全关；在家人数/天气仍不伪造。
 
 ## [S1] Problem
 
@@ -176,3 +176,10 @@ commits: 3fff5f8..5b04ecc
 ### Phase 1.3 图片资源（2026-09-14）
 
 - [x] T14: 生成并接入横幅/房间封面/空状态插画 — acceptance: assets 目录 6 张 PNG；首页横幅与房间卡使用插画，缺图回退渐变；打包脚本纳入资源 (covers: S2.3)
+
+### Phase 1.4 效果图差距全量对齐（2026-09-14）
+
+- [x] T15: 侧栏底部用户区 + 本地时钟 — acceptance: 头像/称呼/角色；大号 HH:MM 与日期；消息项角标（0 隐藏） (covers: S2.1, S2.2)
+- [x] T16: 需要关注 2×2 卡片 — acceptance: 关注项网格布局，图标/标题/副文案/查看 (covers: S2.3.4)
+- [x] T17: 常用设备卡片重排 — acceptance: 横向图标卡 + 名称/房间/状态文案 + 开关，双列网格 (covers: S2.3.6)
+- [x] T18: 右栏房间封面与灯光批处理 — acceptance: 房间顶部插画横幅；灯光分类有全开/全关 (covers: S2.4)

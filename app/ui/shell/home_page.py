@@ -289,6 +289,7 @@ class _AttentionRow(QFrame):
     def __init__(self, item: AttentionItem, parent=None):
         super().__init__(parent)
         self.setObjectName("attentionRow")
+        self.setMinimumWidth(220)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(14, 12, 14, 12)
         lay.setSpacing(12)
@@ -500,15 +501,16 @@ class HomePage(QScrollArea):
 
     def _build_attention(self, items: list[AttentionItem]) -> QWidget:
         card = _SectionCard("需要关注")
-        wrap = QWidget()
-        col = QVBoxLayout(wrap)
-        col.setContentsMargins(0, 0, 0, 0)
-        col.setSpacing(8)
-        for item in items[:8]:
+        grid_host = QWidget()
+        grid = QGridLayout(grid_host)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+        for i, item in enumerate(items[:4]):
             row = _AttentionRow(item)
             row.open_device.connect(self.device_selected.emit)
-            col.addWidget(row)
-        card.body().addWidget(wrap)
+            grid.addWidget(row, i // 2, i % 2)
+        card.body().addWidget(grid_host)
         return card
 
     def _build_rooms(self, rooms: list[RoomSummary]) -> QWidget:
@@ -554,18 +556,18 @@ class HomePage(QScrollArea):
             "media": "mdi.television",
         }.get(kind, "mdi.devices")
         badge = QFrame()
-        badge.setFixedSize(40, 40)
+        badge.setFixedSize(44, 44)
         on = self._known_power.get(device.did) is True
         badge.setStyleSheet(
             f"QFrame {{ background: {SiColors.THEME if on else SiColors.SURFACE};"
-            f" border-radius: 12px; }}")
+            f" border-radius: 14px; }}")
         bl = QVBoxLayout(badge)
         bl.setContentsMargins(0, 0, 0, 0)
         ic = QLabel()
         ic.setPixmap(qta.icon(
             icon_name,
             color=SiColors.ON_THEME_TEXT if on else SiColors.TEXT_SECONDARY,
-        ).pixmap(20, 20))
+        ).pixmap(22, 22))
         ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bl.addWidget(ic)
         lay.addWidget(badge)
@@ -581,14 +583,23 @@ class HomePage(QScrollArea):
             lambda e, did=device.did: self.device_selected.emit(did)
             if e.button() == Qt.MouseButton.LeftButton else None
         )
-        sub = QLabel(device.room_name or device.home_name)
+        state = self._known_power.get(device.did)
+        if not device.online:
+            status = "离线"
+        elif state is True:
+            status = {"light": "已点亮", "climate": "制冷中", "curtain": "已打开"}.get(kind, "运行中")
+        elif state is False:
+            status = "已关闭"
+        else:
+            status = "状态未知"
+        sub_text = f"{device.room_name or device.home_name} · {status}"
+        sub = QLabel(sub_text)
         sub.setStyleSheet(
             f"color: {SiColors.TEXT_MUTED}; background: transparent; font-size: 9pt;")
         col.addWidget(name)
         col.addWidget(sub)
         lay.addLayout(col, 1)
 
-        state = self._known_power.get(device.did)
         switch = QPushButton()
         switch.setFixedSize(44, 26)
         switch.setCursor(Qt.CursorShape.PointingHandCursor)

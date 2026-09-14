@@ -305,6 +305,8 @@ class MainWindow(QMainWindow):
 
         self._nav = NavSidebar()
         self._nav.navigate.connect(self._on_shell_navigate)
+        from app.core.settings_store import get_display_name as _get_dn
+        self._nav.set_display_name(_get_dn())
         body.addWidget(self._nav)
 
         self._content_stack = QStackedWidget()
@@ -341,6 +343,7 @@ class MainWindow(QMainWindow):
         self._room_panel = RoomPanel()
         self._room_panel.device_selected.connect(self._on_open_device)
         self._room_panel.power_toggled.connect(self._on_shell_power_toggled)
+        self._room_panel.power_many_requested.connect(self._on_shell_power_many)
         self._room_panel.prop_write_requested.connect(self._on_shell_prop_write)
         self._room_panel.hide()
         body.addWidget(self._room_panel)
@@ -458,6 +461,23 @@ class MainWindow(QMainWindow):
             on_error=lambda err, d=did: self._on_shell_power_failed(d, err),
         )
 
+    def _on_shell_power_many(self, dids: list, turn_on: bool) -> None:
+        """灯光全开/全关：串行提交，避免并发写网关。"""
+        for did in dids:
+            if did in self._shell_busy_power:
+                continue
+            self._shell_busy_power.add(did)
+
+            def _run(d=did, on_flag=turn_on):
+                self._service.set_power_state(d, on_flag)
+                return on_flag
+
+            self._jobs.submit(
+                _run,
+                on_success=lambda state, d=did: self._on_shell_power_done(d, bool(state)),
+                on_error=lambda err, d=did: self._on_shell_power_failed(d, err),
+            )
+
     def _on_shell_power_done(self, did: str, state: bool) -> None:
         self._shell_busy_power.discard(did)
         self._apply_power_state(did, state)
@@ -507,6 +527,10 @@ class MainWindow(QMainWindow):
             return
         from app.core import tray_store
         from app.core.settings_store import get_display_name
+        if self._nav is not None:
+            self._nav.set_display_name(get_display_name())
+            offline = sum(1 for d in self._displayed_devices() if not d.online)
+            self._nav.set_message_count(offline)
         if self._home_page is not None:
             self._home_page.set_display_name(get_display_name())
             self._home_page.update_data(
@@ -1035,6 +1059,8 @@ class MainWindow(QMainWindow):
             self._update_tray_devices()
         # 同步小爱悬浮按钮显隐
         self._update_voice_fab()
+        # 首页称呼与侧栏用户区可能已改
+        self._update_shell_panels()
 
     def _update_voice_fab(self) -> None:
         """根据设置与设备列表决定小爱悬浮按钮显隐。

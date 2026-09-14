@@ -561,6 +561,13 @@ QFrame#climateCard {
     border: 1px solid $CHIP_BORDER;
     border-radius: 16px;
 }
+
+QFrame#navUserCard,
+QFrame#navClockCard {
+    background: $CARD;
+    border: 1px solid $LINE;
+    border-radius: 12px;
+}
 """)
 
 

@@ -61,7 +61,15 @@ class RoomPanel(QFrame):
     closed = Signal()
     device_selected = Signal(str)
     power_toggled = Signal(str)
+    power_many_requested = Signal(list, bool)  # dids, on
     prop_write_requested = Signal(str, str, object)  # did, prop_name, value
+
+    _ROOM_IMAGE = {
+        "客厅": "room-living.png",
+        "主卧": "room-master.png",
+        "书房": "room-study.png",
+        "次卧": "room-second.png",
+    }
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -152,6 +160,8 @@ class RoomPanel(QFrame):
 
     def _rebuild(self) -> None:
         self._clear_body()
+        self._body_lay.addWidget(self._room_banner())
+
         groups: dict[str, list[DeviceInfo]] = {}
         for d in self._devices:
             groups.setdefault(classify_device(d), []).append(d)
@@ -170,13 +180,33 @@ class RoomPanel(QFrame):
                     for d in rest:
                         self._body_lay.addWidget(self._device_row(d))
                 continue
-            self._body_lay.addWidget(self._section_header(icon, label, items))
+            self._body_lay.addWidget(self._section_header(icon, label, items, bulk=(key == "light")))
             for d in items:
                 self._body_lay.addWidget(self._device_row(d))
 
         self._body_lay.addStretch(1)
 
-    def _section_header(self, icon: str, label: str, items: list[DeviceInfo]) -> QWidget:
+    def _room_banner(self) -> QWidget:
+        from app.ui.shell.home_page import _SoftCover, _ROOM_COVER, _ROOM_IMAGE
+        host = QWidget()
+        lay = QVBoxLayout(host)
+        lay.setContentsMargins(0, 0, 0, 4)
+        cover = _SoftCover(
+            _ROOM_COVER.get(self._room_name, _ROOM_COVER["未分配"]),
+            image_name=_ROOM_IMAGE.get(self._room_name, "room-default.png"),
+            height=120, radius=14)
+        lay.addWidget(cover)
+        online = sum(1 for d in self._devices if d.online)
+        meta = QLabel(f"{len(self._devices)} 台设备 · {online} 在线")
+        meta.setStyleSheet(
+            f"color: {SiColors.TEXT_SECONDARY}; background: transparent;"
+            f" font-size: 9pt; padding: 4px 2px 0 2px;")
+        lay.addWidget(meta)
+        return host
+
+    def _section_header(
+        self, icon: str, label: str, items: list[DeviceInfo], bulk: bool = False
+    ) -> QWidget:
         row = QHBoxLayout()
         ic = QLabel()
         ic.setPixmap(qta.icon(icon, color=SiColors.THEME).pixmap(18, 18))
@@ -186,9 +216,26 @@ class RoomPanel(QFrame):
         text.setStyleSheet(f"color: {SiColors.TEXT_PRIMARY}; background: transparent;")
         row.addWidget(text)
         row.addStretch(1)
-        state = QLabel(f"{on} 开" if on else f"{sum(1 for d in items if d.online)} 在线")
-        state.setStyleSheet(f"color: {SiColors.TEXT_MUTED}; background: transparent;")
-        row.addWidget(state)
+        if bulk:
+            light_dids = [d.did for d in items if d.online]
+            for title, turn_on in (("全开", True), ("全关", False)):
+                btn = QPushButton(title)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setStyleSheet(
+                    f"QPushButton {{ background: {SiColors.SURFACE}; border: none;"
+                    f" border-radius: 8px; padding: 4px 10px;"
+                    f" color: {SiColors.TEXT_SECONDARY}; }}"
+                    f"QPushButton:hover {{ background: {SiColors.BTN_HOVER};"
+                    f" color: {SiColors.THEME}; }}")
+                btn.clicked.connect(
+                    lambda _=False, ds=light_dids, on_flag=turn_on:
+                    self.power_many_requested.emit(ds, on_flag))
+                row.addWidget(btn)
+                row.addSpacing(6)
+        else:
+            state = QLabel(f"{on} 开" if on else f"{sum(1 for d in items if d.online)} 在线")
+            state.setStyleSheet(f"color: {SiColors.TEXT_MUTED}; background: transparent;")
+            row.addWidget(state)
         host = QWidget()
         host.setLayout(row)
         return host
