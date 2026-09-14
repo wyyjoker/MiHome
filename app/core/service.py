@@ -29,7 +29,15 @@ from mijiaAPI.devices import DevAction, DevProp
 from mijiaAPI.miutils import generate_enc_params, gen_nonce, get_signed_nonce
 
 from . import icon_store
-from .models import ActionInfo, DeviceDetail, DeviceInfo, PropInfo, SceneInfo
+from .models import (
+    ActionInfo,
+    ConsumableInfo,
+    DeviceDetail,
+    DeviceInfo,
+    MessageInfo,
+    PropInfo,
+    SceneInfo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +191,106 @@ class MijiaService:
         if not ok:
             raise ServiceError("场景执行失败，请稍后重试")
         return True
+
+    # ---------- 消息与耗材 ----------
+
+    def list_messages(self, hours: int = 24) -> list[MessageInfo]:
+        """拉取近 N 小时米家消息（告警/通知）。"""
+        import time as _time
+        begin_at = int(_time.time()) - max(1, hours) * 3600
+        try:
+            raw = self._api.check_new_msg(begin_at=begin_at)
+        except Exception as exc:
+            raise _wrap_error(exc, "获取消息失败") from exc
+        items = self._extract_message_list(raw)
+        result: list[MessageInfo] = []
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            title = str(
+                item.get("title")
+                or item.get("msg_title")
+                or item.get("type_name")
+                or "米家消息"
+            )
+            body = str(
+                item.get("content")
+                or item.get("body")
+                or item.get("msg_content")
+                or item.get("description")
+                or ""
+            )
+            ts = item.get("timestamp") or item.get("time") or item.get("create_time") or 0
+            try:
+                ts = int(ts)
+            except (TypeError, ValueError):
+                ts = 0
+            # 秒级时间戳过短时按毫秒纠正
+            if ts > 10_000_000_000:
+                ts //= 1000
+            mid = str(item.get("id") or item.get("msg_id") or i)
+            result.append(MessageInfo(
+                msg_id=mid,
+                title=title,
+                body=body,
+                timestamp=ts,
+                category=str(item.get("type") or item.get("category") or ""),
+            ))
+        result.sort(key=lambda m: m.timestamp, reverse=True)
+        return result
+
+    @staticmethod
+    def _extract_message_list(raw) -> list:
+        """上游消息响应结构多变，按常见嵌套取出 list。"""
+        if isinstance(raw, list):
+            return raw
+        if not isinstance(raw, dict):
+            return []
+        for key in ("message_list", "list", "messages", "msg_list", "data"):
+            val = raw.get(key)
+            if isinstance(val, list):
+                return val
+            if isinstance(val, dict):
+                nested = MijiaService._extract_message_list(val)
+                if nested:
+                    return nested
+        result = raw.get("result")
+        if isinstance(result, dict):
+            return MijiaService._extract_message_list(result)
+        if isinstance(result, list):
+            return result
+        return []
+
+    def list_consumables(self) -> list[ConsumableInfo]:
+        """拉取全部家庭耗材（滤芯/电池等）。"""
+        try:
+            homes = self._api.get_homes_list()
+            home_names = {str(h.get("id", "")): h.get("name", "") for h in homes}
+            raw = self._api.get_consumable_items()
+        except Exception as exc:
+            raise _wrap_error(exc, "获取耗材信息失败") from exc
+        items: list[ConsumableInfo] = []
+        for entry in raw or []:
+            if not isinstance(entry, dict):
+                continue
+            home_id = str(entry.get("home_id", "") or "")
+            did = str(entry.get("did", "") or "")
+            name = str(entry.get("name") or entry.get("device_name") or did or "设备")
+            details = entry.get("details") or {}
+            if isinstance(details, dict):
+                desc = str(details.get("description") or details.get("consumable_type") or "耗材")
+                value = str(details.get("value") or details.get("remain") or "")
+            else:
+                desc = "耗材"
+                value = ""
+            items.append(ConsumableInfo(
+                did=did,
+                device_name=name,
+                description=desc,
+                value=value,
+                home_name=home_names.get(home_id, ""),
+            ))
+        return items
 
     # ---------- 设备控制 ----------
 

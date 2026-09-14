@@ -62,6 +62,7 @@ class RoomPanel(QFrame):
     device_selected = Signal(str)
     power_toggled = Signal(str)
     power_many_requested = Signal(list, bool)  # dids, on
+    open_scenes_requested = Signal()
     prop_write_requested = Signal(str, str, object)  # did, prop_name, value
 
     _ROOM_IMAGE = {
@@ -232,6 +233,14 @@ class RoomPanel(QFrame):
                     self.power_many_requested.emit(ds, on_flag))
                 row.addWidget(btn)
                 row.addSpacing(6)
+            scene_btn = QPushButton("场景")
+            scene_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            scene_btn.setStyleSheet(
+                f"QPushButton {{ background: transparent; border: none;"
+                f" padding: 4px 8px; color: {SiColors.THEME}; }}"
+                f"QPushButton:hover {{ color: {SiColors.THEME_HOVER}; }}")
+            scene_btn.clicked.connect(self.open_scenes_requested.emit)
+            row.addWidget(scene_btn)
         else:
             state = QLabel(f"{on} 开" if on else f"{sum(1 for d in items if d.online)} 在线")
             state.setStyleSheet(f"color: {SiColors.TEXT_MUTED}; background: transparent;")

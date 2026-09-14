@@ -150,6 +150,8 @@ class MainWindow(QMainWindow):
         self._shell_busy_power: set[str] = set()
         self._scenes_page = None
         self._scenes_loaded = False
+        self._messages_page = None
+        self._consumables: list = []
         # 产品页名称回退的异步查询防重入
         self._localize_busy = False
         # DPI 变化时恢复期望逻辑尺寸：Qt 在缩放变化后保持物理尺寸
@@ -333,10 +335,15 @@ class MainWindow(QMainWindow):
         self._scenes_page.run_requested.connect(self._on_run_scene)
         self._content_stack.addWidget(self._scenes_page)
 
-        for key in ("automation", "security", "energy", "messages"):
+        for key in ("automation", "security", "energy"):
             page = PlaceholderPage(key)
             self._placeholder_pages[key] = page
             self._content_stack.addWidget(page)
+
+        from app.ui.shell.messages_page import MessagesPage
+        self._messages_page = MessagesPage()
+        self._messages_page.refresh_requested.connect(self.load_messages)
+        self._content_stack.addWidget(self._messages_page)
 
         body.addWidget(self._content_stack, stretch=1)
 
@@ -344,6 +351,7 @@ class MainWindow(QMainWindow):
         self._room_panel.device_selected.connect(self._on_open_device)
         self._room_panel.power_toggled.connect(self._on_shell_power_toggled)
         self._room_panel.power_many_requested.connect(self._on_shell_power_many)
+        self._room_panel.open_scenes_requested.connect(lambda: self._on_shell_navigate("scenes"))
         self._room_panel.prop_write_requested.connect(self._on_shell_prop_write)
         self._room_panel.hide()
         body.addWidget(self._room_panel)
@@ -364,10 +372,39 @@ class MainWindow(QMainWindow):
         self._nav.set_current(key)
         if key == "scenes" and not getattr(self, "_scenes_loaded", False):
             self.load_scenes()
+        if key == "messages":
+            self.load_messages()
         if key != "rooms" and key != "home":
             # 离开首页/房间时收起右栏，避免遮挡
             if self._room_panel is not None:
                 self._room_panel.hide()
+
+    def load_messages(self) -> None:
+        self._jobs.submit(
+            lambda: self._service.list_messages(24),
+            on_success=self._on_messages_loaded,
+            on_error=lambda exc: (
+                logger.warning("加载消息失败: %s", exc),
+                Toast.info(self, f"加载消息失败：{exc}", 4000),
+            ),
+        )
+
+    def _on_messages_loaded(self, messages) -> None:
+        if self._messages_page is not None:
+            self._messages_page.set_messages(messages)
+        if self._nav is not None:
+            self._nav.set_message_count(len(messages))
+
+    def load_consumables(self) -> None:
+        self._jobs.submit(
+            self._service.list_consumables,
+            on_success=self._on_consumables_loaded,
+            on_error=lambda exc: logger.warning("加载耗材失败: %s", exc),
+        )
+
+    def _on_consumables_loaded(self, items) -> None:
+        self._consumables = list(items or [])
+        self._update_shell_panels()
 
     def load_scenes(self) -> None:
         self._scenes_loaded = True
@@ -538,6 +575,7 @@ class MainWindow(QMainWindow):
                 self._known_power,
                 self._metrics,
                 tray_store.load() or [],
+                getattr(self, "_consumables", []),
             )
         if self._rooms_page is not None:
             self._rooms_page.update_data(self._displayed_devices())
@@ -863,6 +901,8 @@ class MainWindow(QMainWindow):
         self._update_shell_panels()
         if self._shell_enabled:
             self.load_scenes()
+            self.load_consumables()
+            self.load_messages()
 
     # ---------- 设备图标 ----------
 

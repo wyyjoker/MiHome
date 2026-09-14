@@ -117,6 +117,7 @@ def build_attention(
     devices: list[DeviceInfo],
     known_power: dict[str, bool | None],
     low_battery: set[str] | None = None,
+    consumables: list | None = None,
 ) -> list[AttentionItem]:
     items: list[AttentionItem] = []
     for d in devices:
@@ -136,6 +137,22 @@ def build_attention(
                 detail=dev.room_name or "请尽快更换电池",
                 severity="battery",
             ))
+    for c in consumables or []:
+        value = str(getattr(c, "value", "") or "")
+        desc = getattr(c, "description", "耗材")
+        name = getattr(c, "device_name", "设备")
+        did = getattr(c, "did", "")
+        try:
+            if value.strip().endswith("%") and float(value.strip("%")) > 20:
+                continue
+        except ValueError:
+            pass
+        items.append(AttentionItem(
+            did=did,
+            title=f"{name} {desc}",
+            detail=value or "耗材需关注",
+            severity="battery",
+        ))
     return items
 
 

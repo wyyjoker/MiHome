@@ -352,6 +352,7 @@ class HomePage(QScrollArea):
         self._metrics: dict[str, str | None] = {}
         self._display_name = "你好"
         self._tray_dids: list[str] = []
+        self._consumables: list = []
 
     def set_display_name(self, name: str) -> None:
         self._display_name = name or "你好"
@@ -362,11 +363,13 @@ class HomePage(QScrollArea):
         known_power: dict[str, bool | None],
         metrics: dict[str, str | None],
         tray_dids: list[str] | None = None,
+        consumables: list | None = None,
     ) -> None:
         self._devices = list(devices)
         self._known_power = dict(known_power)
         self._metrics = dict(metrics)
         self._tray_dids = list(tray_dids or [])
+        self._consumables = list(consumables or [])
         self._rebuild()
 
     def _clear(self) -> None:
@@ -385,7 +388,8 @@ class HomePage(QScrollArea):
         if chips:
             self._root.addWidget(self._build_chips(chips))
 
-        attention = build_attention(self._devices, self._known_power)
+        attention = build_attention(
+            self._devices, self._known_power, consumables=self._consumables)
         if attention:
             self._root.addWidget(self._build_attention(attention))
 

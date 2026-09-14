@@ -74,3 +74,25 @@ class SceneInfo:
     home_id: str
     home_name: str = ""
 
+
+@dataclass
+class MessageInfo:
+    """米家消息中心条目（设备告警/通知）。"""
+
+    msg_id: str
+    title: str
+    body: str
+    timestamp: int  # unix seconds
+    category: str = ""
+
+
+@dataclass
+class ConsumableInfo:
+    """耗材提醒（滤芯/电池等）。"""
+
+    did: str
+    device_name: str
+    description: str
+    value: str
+    home_name: str = ""
+
