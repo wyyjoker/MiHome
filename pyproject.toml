@@ -32,3 +32,4 @@ exclude = ["tests", "tests.*"]
 [tool.setuptools.package-data]
 # 运行期资源：非 editable 安装（pip install .）时也需要这些文件
 "app.ui" = ["*.png", "*.ico"]
+"app.ui.shell" = ["assets/*.png"]

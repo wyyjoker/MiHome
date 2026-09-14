@@ -172,3 +172,7 @@ commits: 3fff5f8..5b04ecc
 
 - [x] T12: 场景页接入手动场景 — acceptance: `service.list_scenes/run_scene` 可用；场景页列出并执行；成功后回读开关 (covers: S2.5)
 - [x] T13: 深色壳可读性 — acceptance: 深色 NAV_ACTIVE 可区分选中；房间卡封面文字主题无关可读 (covers: S2.2)
+
+### Phase 1.3 图片资源（2026-09-14）
+
+- [x] T14: 生成并接入横幅/房间封面/空状态插画 — acceptance: assets 目录 6 张 PNG；首页横幅与房间卡使用插画，缺图回退渐变；打包脚本纳入资源 (covers: S2.3)

@@ -1,4 +1,4 @@
-﻿# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 MiHome-Windows contributors
 <#
 .SYNOPSIS
@@ -130,6 +130,12 @@ $NuitkaArgs = @(
     "--include-data-files=app\ui\icon.png=app/ui/icon.png"
     "--include-data-files=app\ui\tray_icon.png=app/ui/tray_icon.png"
     "--include-data-files=app\ui\tray_icon_light.png=app/ui/tray_icon_light.png"
+    "--include-data-files=app\ui\shell\assets\banner-home.png=app/ui/shell/assets/banner-home.png"
+    "--include-data-files=app\ui\shell\assets\room-living.png=app/ui/shell/assets/room-living.png"
+    "--include-data-files=app\ui\shell\assets\room-master.png=app/ui/shell/assets/room-master.png"
+    "--include-data-files=app\ui\shell\assets\room-study.png=app/ui/shell/assets/room-study.png"
+    "--include-data-files=app\ui\shell\assets\room-second.png=app/ui/shell/assets/room-second.png"
+    "--include-data-files=app\ui\shell\assets\room-default.png=app/ui/shell/assets/room-default.png"
     "--nofollow-import-to=tkinter,unittest,pytest"
     "--noinclude-dlls=qt6datavisualization.dll"
     "--noinclude-dlls=qt6pdf.dll"

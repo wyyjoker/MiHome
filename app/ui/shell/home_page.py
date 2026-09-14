@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -50,38 +50,79 @@ _KIND_BADGE = {
     "media": ("mdi.television", "影音"),
 }
 
+_ROOM_IMAGE = {
+    "客厅": "room-living.png",
+    "主卧": "room-master.png",
+    "书房": "room-study.png",
+    "次卧": "room-second.png",
+    "厨房": "room-default.png",
+    "阳台": "room-default.png",
+    "未分配": "room-default.png",
+}
+
+
+def _load_asset(name: str) -> QPixmap | None:
+    from pathlib import Path
+    from app import resource_path
+    path = resource_path(f"app/ui/shell/assets/{name}")
+    if not Path(path).is_file():
+        return None
+    pix = QPixmap(str(path))
+    return None if pix.isNull() else pix
+
 
 class _SoftCover(QWidget):
-    """柔和渐变封面：可叠加文字，底部可选圆角。"""
+    """柔和封面：优先用本地插画，缺图回退渐变色块。"""
 
     def __init__(
         self,
         colors: tuple[str, str],
+        image_name: str | None = None,
         height: int = 96,
         radius: int = 14,
         parent=None,
     ):
         super().__init__(parent)
         self._colors = colors
+        self._image_name = image_name
         self._radius = radius
+        self._src: QPixmap | None = None
         self.setFixedHeight(height)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        grad = QLinearGradient(0, 0, self.width() * 0.85, self.height())
-        grad.setColorAt(0, QColor(self._colors[0]))
-        grad.setColorAt(1, QColor(self._colors[1]))
         path = QPainterPath()
         path.addRoundedRect(
             float(self.rect().x()), float(self.rect().y()),
             float(self.rect().width()), float(self.rect().height()),
             float(self._radius), float(self._radius),
         )
-        painter.fillPath(path, grad)
-        # 右上角柔光圆，增加层次
+        painter.setClipPath(path)
+
+        if self._image_name:
+            if self._src is None:
+                self._src = _load_asset(self._image_name)
+            if self._src is not None:
+                scaled = self._src.scaled(
+                    self.size(),
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                # 居中裁切铺满
+                x = (scaled.width() - self.width()) // 2
+                y = (scaled.height() - self.height()) // 2
+                painter.drawPixmap(-max(x, 0), -max(y, 0), scaled)
+                painter.fillRect(self.rect(), QColor(255, 255, 255, 40))
+                return
+
+        grad = QLinearGradient(0, 0, self.width() * 0.85, self.height())
+        grad.setColorAt(0, QColor(self._colors[0]))
+        grad.setColorAt(1, QColor(self._colors[1]))
         painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(grad)
+        painter.drawPath(path)
         painter.setBrush(QColor(255, 255, 255, 40))
         r = int(self.height() * 0.55)
         painter.drawEllipse(self.width() - r - 12, -r // 3, r, r)
@@ -165,6 +206,7 @@ class _RoomCard(QFrame):
         cover_lay.setContentsMargins(0, 0, 0, 0)
         cover = _SoftCover(
             _ROOM_COVER.get(room.name, _ROOM_COVER["未分配"]),
+            image_name=_ROOM_IMAGE.get(room.name, "room-default.png"),
             height=108, radius=14)
         cover_lay.addWidget(cover)
 
@@ -349,6 +391,8 @@ class HomePage(QScrollArea):
         rooms = group_rooms(self._devices)
         if rooms:
             self._root.addWidget(self._build_rooms(rooms))
+        elif not self._devices:
+            self._root.addWidget(self._build_empty())
 
         common = pick_common_devices(
             self._devices, self._known_power, self._tray_dids)
@@ -356,6 +400,26 @@ class HomePage(QScrollArea):
             self._root.addWidget(self._build_common(common))
 
         self._root.addStretch(1)
+
+    def _build_empty(self) -> QWidget:
+        card = _SectionCard()
+        host = QWidget()
+        col = QVBoxLayout(host)
+        col.setContentsMargins(0, 8, 0, 8)
+        col.setSpacing(12)
+        cover = _SoftCover(
+            (SiColors.BANNER_A, SiColors.BANNER_B),
+            image_name="room-default.png",
+            height=160, radius=16)
+        col.addWidget(cover)
+        tip = QLabel("暂无设备数据\n刷新后将显示房间与常用设备")
+        tip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tip.setStyleSheet(
+            f"color: {SiColors.TEXT_SECONDARY}; background: transparent; font-size: 11pt;")
+        tip.setWordWrap(True)
+        col.addWidget(tip)
+        card.body().addWidget(host)
+        return card
 
     def _build_header(self) -> QWidget:
         row = QHBoxLayout()
@@ -418,6 +482,7 @@ class HomePage(QScrollArea):
 
         cover = _SoftCover(
             (SiColors.BANNER_A, SiColors.BANNER_B),
+            image_name="banner-home.png",
             height=104, radius=16)
         cover.setFixedWidth(200)
         lay.addWidget(cover)
