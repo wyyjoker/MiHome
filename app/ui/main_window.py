@@ -45,6 +45,11 @@ from app.core.service import MijiaService
 from app.ui.device_card import DeviceCard
 from app.ui.device_dialog import DeviceDetailDialog
 from app.ui.si_theme import SiColors, themed_tab_button
+from app.ui.shell.home_page import HomePage
+from app.ui.shell.nav_sidebar import NavSidebar
+from app.ui.shell.placeholder_page import PlaceholderPage
+from app.ui.shell.room_panel import RoomPanel
+from app.ui.shell.rooms_page import RoomsPage
 from app.ui.toast import Toast
 from app.ui.tray import TrayController, TrayManagerDialog
 from app.ui.voice_fab import VoiceFab
@@ -132,6 +137,17 @@ class MainWindow(QMainWindow):
         # 隐藏无可控制功能的设备（设置开关，默认关）
         from app.core.settings_store import get_hide_no_func_devices
         self._hide_no_func = get_hide_no_func_devices()
+        # 米家新版应用壳（左侧导航 + 家庭首页 + 房间右栏）
+        from app.core.settings_store import get_home_shell_enabled
+        self._shell_enabled = get_home_shell_enabled()
+        self._shell_route = "home"
+        self._nav: NavSidebar | None = None
+        self._content_stack = None
+        self._home_page: HomePage | None = None
+        self._rooms_page: RoomsPage | None = None
+        self._room_panel: RoomPanel | None = None
+        self._placeholder_pages: dict[str, QWidget] = {}
+        self._shell_busy_power: set[str] = set()
         # 产品页名称回退的异步查询防重入
         self._localize_busy = False
         # DPI 变化时恢复期望逻辑尺寸：Qt 在缩放变化后保持物理尺寸
@@ -252,8 +268,12 @@ class MainWindow(QMainWindow):
         content_host = QWidget()
         content_host.setObjectName("contentHost")
         content_host.setLayout(content)
-        body.addWidget(content_host, stretch=1)
-        root.addLayout(body)
+
+        if self._shell_enabled:
+            self._build_shell_body(root, content_host)
+        else:
+            body.addWidget(content_host, stretch=1)
+            root.addLayout(body)
 
         container = QWidget()
         container.setLayout(root)
@@ -272,6 +292,190 @@ class MainWindow(QMainWindow):
 
         # 顶栏/标题栏固定控件的内联样式集中在此设置，主题切换时重设
         self._reapply_chrome_styles()
+
+    def _build_shell_body(self, root: QVBoxLayout, devices_host: QWidget) -> None:
+        """米家新版壳：左导航 + 内容栈（家庭/房间/设备/占位）+ 右房间面板。"""
+        from PySide6.QtWidgets import QStackedWidget
+
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+
+        self._nav = NavSidebar()
+        self._nav.navigate.connect(self._on_shell_navigate)
+        body.addWidget(self._nav)
+
+        self._content_stack = QStackedWidget()
+        self._content_stack.setObjectName("contentHost")
+
+        from app.core.settings_store import get_display_name
+        self._home_page = HomePage()
+        self._home_page.set_display_name(get_display_name())
+        self._home_page.room_selected.connect(self._on_shell_room_selected)
+        self._home_page.device_selected.connect(self._on_open_device)
+        self._home_page.power_toggled.connect(self._on_shell_power_toggled)
+        self._home_page.refresh_requested.connect(self.load_devices)
+        self._content_stack.addWidget(self._home_page)
+
+        self._rooms_page = RoomsPage()
+        self._rooms_page.room_selected.connect(self._on_shell_room_selected)
+        self._content_stack.addWidget(self._rooms_page)
+
+        self._content_stack.addWidget(devices_host)
+
+        for key in ("scenes", "automation", "security", "energy", "messages"):
+            page = PlaceholderPage(key)
+            self._placeholder_pages[key] = page
+            self._content_stack.addWidget(page)
+
+        body.addWidget(self._content_stack, stretch=1)
+
+        self._room_panel = RoomPanel()
+        self._room_panel.device_selected.connect(self._on_open_device)
+        self._room_panel.power_toggled.connect(self._on_shell_power_toggled)
+        self._room_panel.prop_write_requested.connect(self._on_shell_prop_write)
+        self._room_panel.hide()
+        body.addWidget(self._room_panel)
+
+        root.addLayout(body)
+        self._shell_route = "home"
+        self._content_stack.setCurrentIndex(0)
+
+    def _on_shell_navigate(self, key: str) -> None:
+        if key == "settings":
+            self.show_settings()
+            self._nav.set_current(self._shell_route)
+            return
+        self._shell_route = key
+        order = ["home", "rooms", "devices", "scenes", "automation", "security", "energy", "messages"]
+        if key in order:
+            self._content_stack.setCurrentIndex(order.index(key))
+        self._nav.set_current(key)
+        if key != "rooms" and key != "home":
+            # 离开首页/房间时收起右栏，避免遮挡
+            if self._room_panel is not None:
+                self._room_panel.hide()
+
+    def _on_shell_room_selected(self, room_name: str) -> None:
+        devices = [
+            d for d in self._displayed_devices()
+            if (self._current_home == _ALL_HOMES or d.home_name == self._current_home)
+            and d.room_name == room_name
+        ]
+        self._room_panel.set_room(room_name, devices, self._known_power, self._metrics)
+        self._load_climate_for_room(devices)
+
+    def _load_climate_for_room(self, devices: list[DeviceInfo]) -> None:
+        """房间面板打开后，异步加载空调 detail 与当前读数。"""
+        from app.ui.shell.home_models import classify_device
+        climate = next(
+            (d for d in devices if d.online and classify_device(d) == "climate"),
+            None,
+        )
+        if climate is None:
+            self._room_panel.set_climate_detail(None, None)
+            return
+        did = climate.did
+
+        def _load():
+            detail = self._service.device_detail(did)
+            names = ["target-temperature", "temperature", "relative-humidity", "mode"]
+            # 兼容下划线命名
+            extra = ["target_temperature", "humidity", "air-conditioner-mode"]
+            values = {}
+            try:
+                values = self._service.read_props(did, names + extra)
+            except Exception:
+                values = {}
+            # 清理 None 键噪音
+            values = {k: v for k, v in values.items() if v is not None or k in names}
+            return detail, values
+
+        self._jobs.submit(
+            _load,
+            on_success=lambda result, d=did: (
+                self._room_panel.set_climate_detail(result[0], d, result[1])
+                if self._room_panel is not None else None
+            ),
+            on_error=lambda exc: logger.warning("加载空调详情失败: %s", exc),
+        )
+
+    def _on_shell_power_toggled(self, did: str) -> None:
+        if did in self._shell_busy_power:
+            return
+        self._shell_busy_power.add(did)
+        self._jobs.submit(
+            lambda: self._service.toggle_power(did),
+            on_success=lambda state, d=did: self._on_shell_power_done(d, state),
+            on_error=lambda err, d=did: self._on_shell_power_failed(d, err),
+        )
+
+    def _on_shell_power_done(self, did: str, state: bool) -> None:
+        self._shell_busy_power.discard(did)
+        self._apply_power_state(did, state)
+        self._update_shell_panels()
+        device = next((d for d in self._all_devices if d.did == did), None)
+        name = device.name if device else did
+        Toast.info(self, f"已{'打开' if state else '关闭'}「{name}」", 2500)
+
+    def _on_shell_power_failed(self, did: str, error: Exception) -> None:
+        self._shell_busy_power.discard(did)
+        Toast.info(self, f"操作失败：{error}", 4000)
+
+    def _on_shell_prop_write(self, did: str, name: str, value) -> None:
+        def _write():
+            self._service.write_prop(did, name, value)
+
+        self._jobs.submit(
+            _write,
+            on_success=lambda _=None, d=did: self._reload_climate_values(d),
+            on_error=lambda err: Toast.info(self, f"设置失败：{err}", 4000),
+        )
+
+    def _reload_climate_values(self, did: str) -> None:
+        def _read():
+            names = [
+                "target-temperature", "temperature", "relative-humidity",
+                "target_temperature", "humidity", "mode",
+            ]
+            return self._service.read_props(did, names)
+
+        self._jobs.submit(
+            _read,
+            on_success=lambda values, d=did: (
+                self._room_panel.set_climate_detail(
+                    self._room_panel._climate_detail if self._room_panel else None,
+                    d,
+                    values,
+                )
+                if self._room_panel is not None else None
+            ),
+            on_error=lambda exc: logger.warning("回读空调属性失败: %s", exc),
+        )
+
+    def _update_shell_panels(self) -> None:
+        if not self._shell_enabled:
+            return
+        from app.core import tray_store
+        from app.core.settings_store import get_display_name
+        if self._home_page is not None:
+            self._home_page.set_display_name(get_display_name())
+            self._home_page.update_data(
+                self._displayed_devices(),
+                self._known_power,
+                self._metrics,
+                tray_store.load() or [],
+            )
+        if self._rooms_page is not None:
+            self._rooms_page.update_data(self._displayed_devices())
+        if self._room_panel is not None and self._room_panel.isVisible():
+            room = self._room_panel._room_name
+            devices = [
+                d for d in self._displayed_devices()
+                if (self._current_home == _ALL_HOMES or d.home_name == self._current_home)
+                and d.room_name == room
+            ]
+            self._room_panel.set_room(room, devices, self._known_power, self._metrics)
 
     # ---------- 主题 ----------
 
@@ -314,6 +518,9 @@ class MainWindow(QMainWindow):
             self._tray.retheme()
             self._update_tray_devices()
             self._push_tray_metrics()
+        if self._nav is not None:
+            self._nav.retheme()
+        self._update_shell_panels()
         # 打开中的设置页自身也刷新（其样式为构造时求值的内联样式）
         dlg = self._settings_dialog
         if dlg is not None and shiboken6.isValid(dlg) and dlg.isVisible():
@@ -580,6 +787,7 @@ class MainWindow(QMainWindow):
         self._update_voice_fab()
         self._update_tray_devices()
         self._load_card_icons()
+        self._update_shell_panels()
 
     # ---------- 设备图标 ----------
 
@@ -875,6 +1083,7 @@ class MainWindow(QMainWindow):
             self._apply_power_state(did, state)
         self._maybe_localize_names()
         self._update_tray_devices()
+        self._update_shell_panels()
 
     def _apply_power_state(self, did: str, state: bool | None) -> None:
         # 离线设备的开关值不落记忆，避免云端缓存的旧值覆盖灰置状态
@@ -922,6 +1131,7 @@ class MainWindow(QMainWindow):
             device_cache.save(self._all_devices, self._known_power, self._metrics)
         self._maybe_localize_names()
         self._push_tray_metrics()
+        self._update_shell_panels()
 
     def _push_tray_metrics(self) -> None:
         """把温湿度读数同步给托盘快捷窗口（副标题展示）。"""
@@ -1131,6 +1341,8 @@ class MainWindow(QMainWindow):
         # 托盘常驻启动/唤出：隐藏期间积压的网格重建在此执行
         if self._grid_dirty:
             self._rebuild_grid()
+        if self._shell_enabled:
+            self._update_shell_panels()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 (Qt 命名约定)
         super().resizeEvent(event)

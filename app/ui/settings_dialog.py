@@ -339,9 +339,33 @@ class SettingsDialog(OverlayDialog):
         _sync_switch(self._update_toggle)
         update_row.addWidget(self._update_toggle)
 
+        # ── 米家新版首页壳 ──
+        self._shell_item, self._shell_label, self._shell_desc, shell_row = self._make_item(
+            "米家新版首页",
+            "启用左侧导航 + 家庭信息流首页；关闭后回退旧设备卡片网格主界面（需重启生效）")
+        self._shell_toggle = themed_switch()
+        self._shell_toggle.setChecked(settings_store.get_home_shell_enabled())
+        _sync_switch(self._shell_toggle)
+        shell_row.addWidget(self._shell_toggle)
+
+        # ── 首页问候称呼 ──
+        self._name_item, self._name_label, self._name_desc, name_row = self._make_item(
+            "首页问候称呼",
+            "家庭首页问候语中的称呼，例如「张先生」")
+        from PySide6.QtWidgets import QLineEdit
+        self._name_edit = QLineEdit(settings_store.get_display_name())
+        self._name_edit.setMaxLength(24)
+        self._name_edit.setFixedWidth(180)
+        self._name_edit.setStyleSheet(
+            f"QLineEdit {{ background: {SiColors.SURFACE}; border: 1px solid {SiColors.LINE};"
+            f" border-radius: 8px; padding: 6px 10px; color: {SiColors.TEXT_PRIMARY}; }}"
+            f"QLineEdit:focus {{ border-color: {SiColors.THEME}; }}")
+        name_row.addWidget(self._name_edit)
+
         return self._build_scroll([
             self._autostart_item, self._speaker_item, self._tray_item,
             self._start_min_item, self._hide_item, self._update_item,
+            self._shell_item, self._name_item,
         ])
 
     # ---------- 分类切换 ----------
@@ -396,7 +420,8 @@ class SettingsDialog(OverlayDialog):
         panel_card = f"QFrame {{ background: {SiColors.CARD}; border-radius: 10px; }}"
         for item in (self._tray_item, self._start_min_item, self._fab_item,
                      self._theme_item, self._autostart_item, self._speaker_item,
-                     self._hide_item, self._scale_item, self._update_item):
+                     self._hide_item, self._scale_item, self._update_item,
+                     self._shell_item, self._name_item):
             item.setStyleSheet(panel_card)
             # 高度按内容自适应（不固定）：长描述换行后行自然变高，
             # 不会被固定 64px 裁掉；短描述保持紧凑。QScrollArea 负责
@@ -406,14 +431,21 @@ class SettingsDialog(OverlayDialog):
             f"color: {SiColors.TEXT_PRIMARY}; background: transparent;")
         for label in (self._tray_label, self._start_min_label, self._fab_label,
                       self._theme_label, self._autostart_label, self._speaker_label,
-                      self._hide_label, self._scale_label, self._update_label):
+                      self._hide_label, self._scale_label, self._update_label,
+                      self._shell_label, self._name_label):
             label.setStyleSheet(
                 f"color: {SiColors.TEXT_PRIMARY}; background: transparent; font-size: 10pt;")
         for desc in (self._tray_desc, self._start_min_desc, self._fab_desc,
                      self._theme_desc, self._autostart_desc, self._speaker_desc,
-                     self._hide_desc, self._scale_desc, self._update_desc):
+                     self._hide_desc, self._scale_desc, self._update_desc,
+                     self._shell_desc, self._name_desc):
             desc.setStyleSheet(
                 f"color: {SiColors.TEXT_SECONDARY}; background: transparent; font-size: 7pt;")
+        if hasattr(self, "_name_edit"):
+            self._name_edit.setStyleSheet(
+                f"QLineEdit {{ background: {SiColors.SURFACE}; border: 1px solid {SiColors.LINE};"
+                f" border-radius: 8px; padding: 6px 10px; color: {SiColors.TEXT_PRIMARY}; }}"
+                f"QLineEdit:focus {{ border-color: {SiColors.THEME}; }}")
         self._done_btn.setStyleSheet(
             f"QPushButton {{ background: {SiColors.THEME}; border: none; border-radius: 8px; "
             f"padding: 7px 18px; color: {SiColors.ON_THEME_TEXT}; font-weight: 600; }}"
@@ -536,6 +568,8 @@ class SettingsDialog(OverlayDialog):
             settings_store.set_voice_fab_enabled(self._voice_fab_toggle.isChecked())
         settings_store.set_hide_no_func_devices(self._hide_toggle.isChecked())
         settings_store.set_check_update_enabled(self._update_toggle.isChecked())
+        settings_store.set_home_shell_enabled(self._shell_toggle.isChecked())
+        settings_store.set_display_name(self._name_edit.text())
         settings_store.set_theme_mode(self._pending_mode)
         # 界面缩放：记录是否变化，供保存后提示重启
         old_scale = self._original_ui_scale

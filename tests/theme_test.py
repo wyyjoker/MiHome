@@ -60,7 +60,7 @@ app.processEvents()
 
 img = win.grab().toImage()
 bg = img.pixelColor(500, 18)
-assert bg.name().upper() == "#ECECEF", f"浅色标题栏异常: {bg.name()}"
+assert bg.name().upper() == "#EDE8DF", f"浅色标题栏异常: {bg.name()}"
 card = next(iter(win._cards.values()))
 cimg = card.grab().toImage()
 cc = cimg.pixelColor(5, 5)
@@ -84,7 +84,7 @@ print("4. 切换深色重建 OK")
 win.apply_theme_mode("light")
 app.processEvents()
 img = win.grab().toImage()
-assert img.pixelColor(500, 18).name().upper() == "#ECECEF"
+assert img.pixelColor(500, 18).name().upper() == "#EDE8DF"
 print("4b. 切回浅色 OK")
 
 # ---------- 5. 设置页：下拉预览 + 取消还原 ----------

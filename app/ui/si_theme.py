@@ -86,40 +86,50 @@ PALETTES: dict[str, dict[str, str]] = {
         WARN_BG="#3a2d12",
         WARN_BORDER="#5a4220",
         WARN_TEXT="#e8c87a",
+        NAV_BG="#23242a",
+        NAV_ACTIVE="#2a2c32",
+        NAV_HOVER="#2a2c32",
+        CHIP_BG="#2a2c32",
+        CHIP_BORDER="#35363f",
+        BANNER_A="#2a2c32",
+        BANNER_B="#24262c",
+        ACCENT_WARM="#c4a574",
+        PANEL_BG="#25262c",
     ),
+    # 浅色米家新版：暖米色信息流底 + 白卡片（对齐目标截图）
     "light": dict(
-        WINDOW_BG="#f2f3f5",
-        TITLE_BAR_BG="#ececef",
-        TITLE_BAR_BORDER="#dcdfe4",
+        WINDOW_BG="#f4f1ea",
+        TITLE_BAR_BG="#ede8df",
+        TITLE_BAR_BORDER="#ddd6c8",
         CARD="#ffffff",
-        CARD_HOVER="#f4f5f7",
-        CARD_BORDER_HOVER="#d0d3da",
-        SURFACE="#eef0f3",
-        SURFACE_PRESSED="#e4e6ea",
-        PRESSED="#d9dade",
-        BTN_PRESSED="#dfe1e6",
-        BTN_HOVER="#e9eaee",
-        LINE="#e3e4e8",
-        SCROLLBAR="#c9cbd2",
-        SCROLLBAR_HOVER="#b0b3bc",
-        TEXT_PRIMARY="#17181c",
-        TEXT_SECONDARY="#6b6d76",
-        TEXT_MUTED="#85878e",
-        TEXT_SUBTLE="#8a8b93",
-        TEXT_DISABLED="#b4b6bc",
-        TEXT_FAINT="#c6c8ce",
-        OFFLINE_CARD="#f0f0f2",
-        OFFLINE_TEXT="#a0a2a8",
-        OFFLINE_SUB="#b6b8bf",
-        ICON_DIM="#85878e",
-        ICON_MUTED="#9a9aa0",
-        HOME_HOVER="#55565c",
-        HOME_PRESSED="#75767c",
-        THUMB="#9a9ea6",               # 滑块拇指：浅色模式中深灰（白底上清晰可见）
-        STATE_OFF="#c4c8d0",
-        STATE_UNKNOWN_BG="#ececef",
-        STATE_UNKNOWN_BORDER="#c9cbd2",
-        STATE_UNKNOWN_HOVER="#e2e3e8",
+        CARD_HOVER="#faf8f3",
+        CARD_BORDER_HOVER="#e0d8c8",
+        SURFACE="#f0ebe1",
+        SURFACE_PRESSED="#e6dfd2",
+        PRESSED="#ddd5c6",
+        BTN_PRESSED="#e8e2d6",
+        BTN_HOVER="#ebe5d8",
+        LINE="#e6e0d4",
+        SCROLLBAR="#d0c8b8",
+        SCROLLBAR_HOVER="#b8ae9c",
+        TEXT_PRIMARY="#2b2a26",
+        TEXT_SECONDARY="#6e6a60",
+        TEXT_MUTED="#8a857a",
+        TEXT_SUBTLE="#9a958a",
+        TEXT_DISABLED="#c4beb0",
+        TEXT_FAINT="#d4cec0",
+        OFFLINE_CARD="#f7f4ee",
+        OFFLINE_TEXT="#a8a294",
+        OFFLINE_SUB="#b8b2a4",
+        ICON_DIM="#8a857a",
+        ICON_MUTED="#9a958a",
+        HOME_HOVER="#4a463c",
+        HOME_PRESSED="#6a6558",
+        THUMB="#8a857a",
+        STATE_OFF="#d0c8b8",
+        STATE_UNKNOWN_BG="#f0ebe1",
+        STATE_UNKNOWN_BORDER="#d8d0c0",
+        STATE_UNKNOWN_HOVER="#e8e2d6",
         ERROR_TEXT="#c62828",
         DEL_TEXT="#b05a5a",
         DEL_BORDER="#e8c5c5",
@@ -127,6 +137,16 @@ PALETTES: dict[str, dict[str, str]] = {
         WARN_BG="#fdf3d8",
         WARN_BORDER="#e8d49a",
         WARN_TEXT="#8a6d1f",
+        # 壳层扩展：侧栏 / chips / 横幅
+        NAV_BG="#efe9df",
+        NAV_ACTIVE="#ffffff",
+        NAV_HOVER="#f7f3eb",
+        CHIP_BG="#ffffff",
+        CHIP_BORDER="#e8e2d6",
+        BANNER_A="#f7f0e4",
+        BANNER_B="#e8f0e8",
+        ACCENT_WARM="#c4a574",
+        PANEL_BG="#faf7f1",
     ),
 }
 
@@ -412,6 +432,106 @@ QFrame#voicePanel {
     background: $SURFACE;
     border: 1px solid $LINE;
     border-radius: 12px;
+}
+
+/* ---------- 米家新版应用壳 ---------- */
+
+QWidget#shellRoot {
+    background: $WINDOW_BG;
+}
+
+QFrame#navSidebar {
+    background: $NAV_BG;
+    border-right: 1px solid $LINE;
+}
+
+QPushButton#navItem {
+    background: transparent;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 14px;
+    text-align: left;
+    color: $TEXT_SECONDARY;
+    font-size: 10pt;
+}
+
+QPushButton#navItem:hover {
+    background: $NAV_HOVER;
+    color: $TEXT_PRIMARY;
+}
+
+QPushButton#navItem:checked {
+    background: $NAV_ACTIVE;
+    color: $TEXT_PRIMARY;
+    font-weight: 600;
+}
+
+QFrame#rightPanel {
+    background: $PANEL_BG;
+    border-left: 1px solid $LINE;
+}
+
+QFrame#homeSectionCard {
+    background: $CARD;
+    border: 1px solid $LINE;
+    border-radius: 16px;
+}
+
+QLabel#homeSectionTitle {
+    font-size: 11pt;
+    font-weight: 600;
+    color: $TEXT_PRIMARY;
+    background: transparent;
+}
+
+QLabel#greetingTitle {
+    font-size: 18pt;
+    font-weight: 700;
+    color: $TEXT_PRIMARY;
+    background: transparent;
+}
+
+QLabel#greetingSub {
+    font-size: 10pt;
+    color: $TEXT_SECONDARY;
+    background: transparent;
+}
+
+QFrame#chipPill {
+    background: $CHIP_BG;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 12px;
+}
+
+QFrame#roomCard {
+    background: $CARD;
+    border: 1px solid $LINE;
+    border-radius: 16px;
+}
+
+QFrame#roomCard:hover {
+    background: $CARD_HOVER;
+    border-color: $CARD_BORDER_HOVER;
+}
+
+QLabel#roomCardTitle {
+    font-size: 12pt;
+    font-weight: 600;
+    color: $TEXT_PRIMARY;
+    background: transparent;
+}
+
+QLabel#placeholderTitle {
+    font-size: 16pt;
+    font-weight: 600;
+    color: $TEXT_PRIMARY;
+    background: transparent;
+}
+
+QLabel#placeholderSub {
+    font-size: 10pt;
+    color: $TEXT_SECONDARY;
+    background: transparent;
 }
 """)
 

@@ -26,6 +26,8 @@ _DEFAULTS: dict = {
     "ui_scale": 1.0,    # 界面缩放个人微调乘数（叠加在软件基准缩放之上），需重启生效
     "tray_columns": 2,  # 托盘快捷窗口卡片列数：1 或 2
     "check_update_enabled": True,  # 启动时自动检查 GitHub 新版本
+    "display_name": "你好",  # 家庭首页问候称呼
+    "home_shell_enabled": True,  # 米家新版壳+家庭首页；False 回退旧设备网格主窗
 }
 
 
@@ -125,6 +127,30 @@ def get_check_update_enabled() -> bool:
 def set_check_update_enabled(value: bool) -> None:
     raw = _read_raw()
     raw["check_update_enabled"] = bool(value)
+    _write_raw(raw)
+
+
+def get_display_name() -> str:
+    """家庭首页问候称呼，默认「你好」。"""
+    value = _read_raw().get("display_name", "你好")
+    return value if isinstance(value, str) and value.strip() else "你好"
+
+
+def set_display_name(value: str) -> None:
+    raw = _read_raw()
+    text = (value or "").strip()
+    raw["display_name"] = text if text else "你好"
+    _write_raw(raw)
+
+
+def get_home_shell_enabled() -> bool:
+    """是否启用米家新版应用壳与家庭首页，默认开启。"""
+    return bool(_read_raw().get("home_shell_enabled", True))
+
+
+def set_home_shell_enabled(value: bool) -> None:
+    raw = _read_raw()
+    raw["home_shell_enabled"] = bool(value)
     _write_raw(raw)
 
 
