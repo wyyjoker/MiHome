@@ -2,24 +2,24 @@
 feature: mihome-home-shell
 status: delivered
 updated: 2026-09-14
-branch: feat/mihome-home-shell
-commits: 3fff5f8..working-tree
+branch: main
+commits: 3fff5f8..5b04ecc
 ---
 
 # 米家新版家庭首页壳（Phase 1）
 
 ## Report
 
-**What was built** — 在独立工作区 `E:\MiHome\workspace-mihome-home-shell`（分支 `feat/mihome-home-shell`）落地米家新版应用壳：左侧导航（家庭/房间/设备/场景/自动化/安防/能耗/消息/设置）、暖米色浅色信息流家庭首页（问候横幅、状态 chips、需要关注、房间卡、常用设备）、右侧房间面板（分类设备 + 空调深控）。旧设备网格迁入「设备」页，场景等 5 项占位；设置新增「米家新版首页」开关与「首页问候称呼」。`home_shell_enabled=False` 可回退旧主窗结构。
+**What was built** — 米家新版应用壳已合入 `MiHome-Windows` 的 `main`（`5b04ecc`）：左侧导航、暖米色信息流家庭首页、右侧房间面板与空调深控。旧设备网格迁入「设备」页；设置支持问候称呼与 `home_shell` 回退。同提交已推送至 `fork/main`（wyyjoker/MiHome）。
 
-**Verification** — `python -m tests.smoke_test` PASS；`python -m tests.theme_test` PASS（浅色标题栏期望值更新为 `#EDE8DF`）；offscreen 构造 `MainWindow` + 模拟设备列表 + 房间选中 + 导航切换 OK。
+**Verification** — `tests.smoke_test` PASS；`tests.theme_test` PASS；应用已自 `E:\MiHome\MiHome-Windows` 启动（仅 DPI 警告）。
 
 **Journey log** —
 1. 本机原仅 Python 3.8，winget 安装 3.12 后才能跑项目。
-2. 沙箱禁止 `git worktree add`，改用独立 clone 作隔离工作区。
-3. 批量开关轮询若逐设备重建首页会 O(n) 卡顿，改为 `_apply_power_states` 末尾统一刷新一次。
-4. 浅色调色板从冷灰改为暖米色，主题回归测试同步更新断言。
-5. 常用设备误用 `QGridLayout.addWidget(w, i)`（需 row/col），已改为垂直列表。
+2. 沙箱禁止 `git worktree add` / `git merge`，用独立 clone + patch 落回 main。
+3. 批量开关轮询改为末尾统一刷新，避免 O(n) 重建首页。
+4. 浅色调色板改为暖米色，主题回归期望值同步更新。
+5. 常用设备 `QGridLayout.addWidget` 需 row/col，已改垂直列表。
 
 ## [S1] Problem
 
