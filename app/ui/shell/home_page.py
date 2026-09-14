@@ -353,9 +353,20 @@ class HomePage(QScrollArea):
         self._display_name = "你好"
         self._tray_dids: list[str] = []
         self._consumables: list = []
+        self._weather: object | None = None
 
     def set_display_name(self, name: str) -> None:
         self._display_name = name or "你好"
+
+    def set_weather(self, snapshot) -> None:
+        """WeatherSnapshot 或 None。"""
+        self._weather = snapshot
+        # 仅刷新顶栏，避免整页重建闪烁
+        if self._root.count() > 0:
+            header = self._root.itemAt(0).widget()
+            if header is not None:
+                # 重建整个页最简单且频率低（约 15 分钟一次）
+                self._rebuild()
 
     def update_data(
         self,
@@ -434,6 +445,28 @@ class HomePage(QScrollArea):
             f"color: {SiColors.TEXT_PRIMARY}; background: transparent;")
         row.addWidget(title)
         row.addStretch(1)
+
+        w = self._weather
+        if w is not None:
+            parts = []
+            temp = getattr(w, "temperature", None)
+            if temp is not None:
+                parts.append(f"{temp:.0f}°C")
+            text = getattr(w, "weather_text", "") or ""
+            if text:
+                parts.append(text)
+            aqi = getattr(w, "aqi", None)
+            aqi_text = getattr(w, "aqi_text", "") or ""
+            if aqi is not None:
+                parts.append(f"空气{aqi_text or '—'} {aqi}")
+            if parts:
+                weather = QLabel("  ".join(parts))
+                weather.setStyleSheet(
+                    f"color: {SiColors.TEXT_SECONDARY}; background: transparent;"
+                    f" font-size: 10pt;")
+                row.addWidget(weather)
+                row.addSpacing(12)
+
         online = sum(1 for d in self._devices if d.online)
         if self._devices:
             pill = QLabel(f"  ●  {online} 台在线")

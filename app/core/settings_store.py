@@ -28,6 +28,8 @@ _DEFAULTS: dict = {
     "check_update_enabled": True,  # 启动时自动检查 GitHub 新版本
     "display_name": "你好",  # 家庭首页问候称呼
     "home_shell_enabled": True,  # 米家新版壳+家庭首页；False 回退旧设备网格主窗
+    "weather_enabled": True,  # 首页顶栏天气/空气质量（Open-Meteo）
+    "weather_city": "北京",  # 天气城市；空则隐藏
 }
 
 
@@ -151,6 +153,27 @@ def get_home_shell_enabled() -> bool:
 def set_home_shell_enabled(value: bool) -> None:
     raw = _read_raw()
     raw["home_shell_enabled"] = bool(value)
+    _write_raw(raw)
+
+
+def get_weather_enabled() -> bool:
+    return bool(_read_raw().get("weather_enabled", True))
+
+
+def set_weather_enabled(value: bool) -> None:
+    raw = _read_raw()
+    raw["weather_enabled"] = bool(value)
+    _write_raw(raw)
+
+
+def get_weather_city() -> str:
+    value = _read_raw().get("weather_city", "北京")
+    return value if isinstance(value, str) else "北京"
+
+
+def set_weather_city(value: str) -> None:
+    raw = _read_raw()
+    raw["weather_city"] = (value or "").strip()
     _write_raw(raw)
 
 

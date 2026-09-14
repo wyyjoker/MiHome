@@ -152,6 +152,10 @@ class MainWindow(QMainWindow):
         self._scenes_loaded = False
         self._messages_page = None
         self._consumables: list = []
+        self._weather = None
+        self._weather_timer = QTimer(self)
+        self._weather_timer.setInterval(15 * 60 * 1000)
+        self._weather_timer.timeout.connect(self.refresh_weather)
         # 产品页名称回退的异步查询防重入
         self._localize_busy = False
         # DPI 变化时恢复期望逻辑尺寸：Qt 在缩放变化后保持物理尺寸
@@ -406,6 +410,31 @@ class MainWindow(QMainWindow):
         self._consumables = list(items or [])
         self._update_shell_panels()
 
+    def refresh_weather(self) -> None:
+        """按设置异步拉取天气；关闭或未配置城市则清空展示。"""
+        from app.core.settings_store import get_weather_city, get_weather_enabled
+        if not get_weather_enabled() or not get_weather_city().strip():
+            self._weather = None
+            if self._home_page is not None:
+                self._home_page.set_weather(None)
+            return
+        city = get_weather_city()
+
+        def _fetch():
+            from app.core import weather_service
+            return weather_service.fetch_weather(city)
+
+        self._jobs.submit(
+            _fetch,
+            on_success=self._on_weather_loaded,
+            on_error=lambda exc: logger.warning("天气刷新失败: %s", exc),
+        )
+
+    def _on_weather_loaded(self, snapshot) -> None:
+        self._weather = snapshot
+        if self._home_page is not None:
+            self._home_page.set_weather(snapshot)
+
     def load_scenes(self) -> None:
         self._scenes_loaded = True
         self._jobs.submit(
@@ -570,6 +599,8 @@ class MainWindow(QMainWindow):
             self._nav.set_message_count(offline)
         if self._home_page is not None:
             self._home_page.set_display_name(get_display_name())
+            if self._weather is not None:
+                self._home_page.set_weather(self._weather)
             self._home_page.update_data(
                 self._displayed_devices(),
                 self._known_power,
@@ -903,6 +934,9 @@ class MainWindow(QMainWindow):
             self.load_scenes()
             self.load_consumables()
             self.load_messages()
+            self.refresh_weather()
+            if not self._weather_timer.isActive():
+                self._weather_timer.start()
 
     # ---------- 设备图标 ----------
 
@@ -1101,6 +1135,8 @@ class MainWindow(QMainWindow):
         self._update_voice_fab()
         # 首页称呼与侧栏用户区可能已改
         self._update_shell_panels()
+        # 天气设置可能变更
+        self.refresh_weather()
 
     def _update_voice_fab(self) -> None:
         """根据设置与设备列表决定小爱悬浮按钮显隐。

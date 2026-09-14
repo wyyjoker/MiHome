@@ -362,10 +362,30 @@ class SettingsDialog(OverlayDialog):
             f"QLineEdit:focus {{ border-color: {SiColors.THEME}; }}")
         name_row.addWidget(self._name_edit)
 
+        # ── 天气城市 / 开关 ──
+        self._weather_item, self._weather_label, self._weather_desc, weather_row = self._make_item(
+            "首页天气",
+            "在家庭首页顶栏显示气温与空气质量（Open-Meteo，需联网；可填城市名）")
+        from PySide6.QtWidgets import QLineEdit as _QLineEdit
+        self._weather_city = _QLineEdit(settings_store.get_weather_city())
+        self._weather_city.setMaxLength(32)
+        self._weather_city.setPlaceholderText("城市，如：北京")
+        self._weather_city.setFixedWidth(140)
+        self._weather_city.setStyleSheet(
+            f"QLineEdit {{ background: {SiColors.SURFACE}; border: 1px solid {SiColors.LINE};"
+            f" border-radius: 8px; padding: 6px 10px; color: {SiColors.TEXT_PRIMARY}; }}"
+            f"QLineEdit:focus {{ border-color: {SiColors.THEME}; }}")
+        self._weather_toggle = themed_switch()
+        self._weather_toggle.setChecked(settings_store.get_weather_enabled())
+        _sync_switch(self._weather_toggle)
+        weather_row.addWidget(self._weather_city)
+        weather_row.addSpacing(10)
+        weather_row.addWidget(self._weather_toggle)
+
         return self._build_scroll([
             self._autostart_item, self._speaker_item, self._tray_item,
             self._start_min_item, self._hide_item, self._update_item,
-            self._shell_item, self._name_item,
+            self._shell_item, self._name_item, self._weather_item,
         ])
 
     # ---------- 分类切换 ----------
@@ -421,7 +441,7 @@ class SettingsDialog(OverlayDialog):
         for item in (self._tray_item, self._start_min_item, self._fab_item,
                      self._theme_item, self._autostart_item, self._speaker_item,
                      self._hide_item, self._scale_item, self._update_item,
-                     self._shell_item, self._name_item):
+                     self._shell_item, self._name_item, self._weather_item):
             item.setStyleSheet(panel_card)
             # 高度按内容自适应（不固定）：长描述换行后行自然变高，
             # 不会被固定 64px 裁掉；短描述保持紧凑。QScrollArea 负责
@@ -432,17 +452,22 @@ class SettingsDialog(OverlayDialog):
         for label in (self._tray_label, self._start_min_label, self._fab_label,
                       self._theme_label, self._autostart_label, self._speaker_label,
                       self._hide_label, self._scale_label, self._update_label,
-                      self._shell_label, self._name_label):
+                      self._shell_label, self._name_label, self._weather_label):
             label.setStyleSheet(
                 f"color: {SiColors.TEXT_PRIMARY}; background: transparent; font-size: 10pt;")
         for desc in (self._tray_desc, self._start_min_desc, self._fab_desc,
                      self._theme_desc, self._autostart_desc, self._speaker_desc,
                      self._hide_desc, self._scale_desc, self._update_desc,
-                     self._shell_desc, self._name_desc):
+                     self._shell_desc, self._name_desc, self._weather_desc):
             desc.setStyleSheet(
                 f"color: {SiColors.TEXT_SECONDARY}; background: transparent; font-size: 7pt;")
         if hasattr(self, "_name_edit"):
             self._name_edit.setStyleSheet(
+                f"QLineEdit {{ background: {SiColors.SURFACE}; border: 1px solid {SiColors.LINE};"
+                f" border-radius: 8px; padding: 6px 10px; color: {SiColors.TEXT_PRIMARY}; }}"
+                f"QLineEdit:focus {{ border-color: {SiColors.THEME}; }}")
+        if hasattr(self, "_weather_city"):
+            self._weather_city.setStyleSheet(
                 f"QLineEdit {{ background: {SiColors.SURFACE}; border: 1px solid {SiColors.LINE};"
                 f" border-radius: 8px; padding: 6px 10px; color: {SiColors.TEXT_PRIMARY}; }}"
                 f"QLineEdit:focus {{ border-color: {SiColors.THEME}; }}")
@@ -570,6 +595,8 @@ class SettingsDialog(OverlayDialog):
         settings_store.set_check_update_enabled(self._update_toggle.isChecked())
         settings_store.set_home_shell_enabled(self._shell_toggle.isChecked())
         settings_store.set_display_name(self._name_edit.text())
+        settings_store.set_weather_enabled(self._weather_toggle.isChecked())
+        settings_store.set_weather_city(self._weather_city.text())
         settings_store.set_theme_mode(self._pending_mode)
         # 界面缩放：记录是否变化，供保存后提示重启
         old_scale = self._original_ui_scale
