@@ -95,6 +95,10 @@ PALETTES: dict[str, dict[str, str]] = {
         BANNER_B="#24262c",
         ACCENT_WARM="#c4a574",
         PANEL_BG="#25262c",
+        CANVAS="#1e1f24",
+        SHADOW="rgba(0,0,0,0.25)",
+        RADIUS_LG=20,
+        RADIUS_MD=14,
     ),
     # 浅色米家新版：暖米色信息流底 + 白卡片（对齐目标截图）
     "light": dict(
@@ -147,6 +151,10 @@ PALETTES: dict[str, dict[str, str]] = {
         BANNER_B="#e8f0e8",
         ACCENT_WARM="#c4a574",
         PANEL_BG="#faf7f1",
+        CANVAS="#f6f2ea",
+        SHADOW="rgba(43,42,38,0.06)",
+        RADIUS_LG=20,
+        RADIUS_MD=14,
     ),
 }
 
@@ -448,11 +456,11 @@ QFrame#navSidebar {
 QPushButton#navItem {
     background: transparent;
     border: none;
-    border-radius: 10px;
-    padding: 10px 14px;
+    border-radius: 12px;
+    padding: 11px 14px;
     text-align: left;
     color: $TEXT_SECONDARY;
-    font-size: 10pt;
+    font-size: 11pt;
 }
 
 QPushButton#navItem:hover {
@@ -473,8 +481,44 @@ QFrame#rightPanel {
 
 QFrame#homeSectionCard {
     background: $CARD;
-    border: 1px solid $LINE;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 18px;
+}
+
+QFrame#homeBanner {
+    background: $CARD;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 20px;
+}
+
+QFrame#attentionRow {
+    background: $CARD;
+    border: 1px solid $CHIP_BORDER;
     border-radius: 16px;
+}
+
+QFrame#commonDeviceCard {
+    background: $CARD;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 16px;
+}
+
+QFrame#roomCard {
+    background: $CARD;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 18px;
+}
+
+QFrame#climateCard {
+    background: $CARD;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 18px;
+}
+
+QFrame#chipPill {
+    background: $CARD;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 14px;
 }
 
 QLabel#homeSectionTitle {

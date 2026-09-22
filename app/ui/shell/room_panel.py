@@ -195,13 +195,13 @@ class RoomPanel(QFrame):
         cover = _SoftCover(
             _ROOM_COVER.get(self._room_name, _ROOM_COVER["未分配"]),
             image_name=_ROOM_IMAGE.get(self._room_name, "room-default.png"),
-            height=120, radius=14)
+            height=160, radius=18)
         lay.addWidget(cover)
         online = sum(1 for d in self._devices if d.online)
         meta = QLabel(f"{len(self._devices)} 台设备 · {online} 在线")
         meta.setStyleSheet(
             f"color: {SiColors.TEXT_SECONDARY}; background: transparent;"
-            f" font-size: 9pt; padding: 4px 2px 0 2px;")
+            f" font-size: 9pt; padding: 6px 2px 0 2px;")
         lay.addWidget(meta)
         return host
 

@@ -69,7 +69,7 @@ class NavSidebar(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("navSidebar")
-        self.setFixedWidth(228)
+        self.setFixedWidth(232)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 20, 16, 18)

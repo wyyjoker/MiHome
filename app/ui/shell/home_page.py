@@ -129,20 +129,28 @@ class _SoftCover(QWidget):
 
 
 class _SectionCard(QFrame):
-    def __init__(self, title: str | None = None, parent=None):
+    def __init__(self, title: str | None = None, parent=None, trailing: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("homeSectionCard")
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(18, 16, 18, 16)
         self._layout.setSpacing(12)
-        if title:
+        if title or trailing is not None:
             head = QHBoxLayout()
-            t = QLabel(title)
-            t.setObjectName("homeSectionTitle")
-            t.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.DemiBold))
-            head.addWidget(t)
+            if title:
+                t = QLabel(title)
+                t.setObjectName("homeSectionTitle")
+                t.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.DemiBold))
+                head.addWidget(t)
             head.addStretch(1)
+            if trailing is not None:
+                head.addWidget(trailing)
             self._layout.addLayout(head)
+        try:
+            from app.ui.shell.visual import apply_card_shadow
+            apply_card_shadow(self, blur=16, y=3)
+        except Exception:
+            pass
 
     def body(self) -> QVBoxLayout:
         return self._layout
@@ -176,8 +184,9 @@ class _StatusChip(QFrame):
         text = QLabel(f"<b>{count}</b> {label}")
         text.setTextFormat(Qt.TextFormat.RichText)
         text.setStyleSheet(
-            f"color: {SiColors.TEXT_SECONDARY}; background: transparent; font-size: 10pt;")
+            f"color: {SiColors.TEXT_SECONDARY}; background: transparent; font-size: 11pt;")
         lay.addWidget(text)
+        self.setFixedHeight(40)
 
 
 class _RoomCard(QFrame):
@@ -194,25 +203,25 @@ class _RoomCard(QFrame):
         self.setObjectName("roomCard")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._room = room.name
-        self.setFixedWidth(200)
+        self.setFixedWidth(186)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
         cover_host = QWidget()
-        cover_host.setFixedHeight(108)
+        cover_host.setFixedHeight(140)
         cover_lay = QVBoxLayout(cover_host)
         cover_lay.setContentsMargins(0, 0, 0, 0)
         cover = _SoftCover(
             _ROOM_COVER.get(room.name, _ROOM_COVER["未分配"]),
             image_name=_ROOM_IMAGE.get(room.name, "room-default.png"),
-            height=108, radius=14)
+            height=140, radius=18)
         cover_lay.addWidget(cover)
 
         overlay = QWidget(cover_host)
         overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        overlay.setGeometry(0, 0, 200, 108)
+        overlay.setGeometry(0, 0, 186, 140)
         ov = QVBoxLayout(overlay)
         ov.setContentsMargins(14, 12, 14, 12)
         ov.addStretch(1)
@@ -296,13 +305,13 @@ class _AttentionRow(QFrame):
         accent = SiColors.WARN_TEXT if item.severity == "battery" else SiColors.THEME
         icon_name = "mdi.battery-alert" if item.severity == "battery" else "mdi.wifi-off"
         badge = QFrame()
-        badge.setFixedSize(36, 36)
+        badge.setFixedSize(40, 40)
         badge.setStyleSheet(
-            f"QFrame {{ background: {SiColors.SURFACE}; border-radius: 10px; }}")
+            f"QFrame {{ background: {accent}22; border-radius: 12px; }}")
         bl = QVBoxLayout(badge)
         bl.setContentsMargins(0, 0, 0, 0)
         ic = QLabel()
-        ic.setPixmap(qta.icon(icon_name, color=accent).pixmap(18, 18))
+        ic.setPixmap(qta.icon(icon_name, color=accent).pixmap(20, 20))
         ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bl.addWidget(ic)
         lay.addWidget(badge)
@@ -343,7 +352,7 @@ class HomePage(QScrollArea):
         self._host = QWidget()
         self._host.setObjectName("shellRoot")
         self._root = QVBoxLayout(self._host)
-        self._root.setContentsMargins(32, 20, 32, 24)
+        self._root.setContentsMargins(28, 18, 28, 22)
         self._root.setSpacing(16)
         self.setWidget(self._host)
 
@@ -492,8 +501,8 @@ class HomePage(QScrollArea):
         card = QFrame()
         card.setObjectName("homeBanner")
         lay = QHBoxLayout(card)
-        lay.setContentsMargins(28, 24, 20, 24)
-        lay.setSpacing(16)
+        lay.setContentsMargins(24, 22, 18, 22)
+        lay.setSpacing(18)
 
         col = QVBoxLayout()
         col.setSpacing(8)
@@ -513,7 +522,7 @@ class HomePage(QScrollArea):
             sub_text = f"家里目前一切正常 · {online} 台设备在线"
         sub = QLabel(sub_text)
         sub.setObjectName("greetingSub")
-        sub.setFont(QFont("Microsoft YaHei UI", 11))
+        sub.setFont(QFont("Microsoft YaHei UI", 12))
         col.addWidget(sub)
         col.addStretch(1)
         lay.addLayout(col, 1)
@@ -521,8 +530,8 @@ class HomePage(QScrollArea):
         cover = _SoftCover(
             (SiColors.BANNER_A, SiColors.BANNER_B),
             image_name="banner-home.png",
-            height=104, radius=16)
-        cover.setFixedWidth(200)
+            height=112, radius=18)
+        cover.setFixedWidth(220)
         lay.addWidget(cover)
         return card
 
@@ -566,7 +575,13 @@ class HomePage(QScrollArea):
         return card
 
     def _build_common(self, devices: list[DeviceInfo]) -> QWidget:
-        card = _SectionCard("常用设备")
+        edit_btn = QPushButton("编辑")
+        edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        edit_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none;"
+            f" color: {SiColors.TEXT_SECONDARY}; }}"
+            f"QPushButton:hover {{ color: {SiColors.THEME}; }}")
+        card = _SectionCard("常用设备", trailing=edit_btn)
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(0, 0, 0, 0)
@@ -593,18 +608,18 @@ class HomePage(QScrollArea):
             "media": "mdi.television",
         }.get(kind, "mdi.devices")
         badge = QFrame()
-        badge.setFixedSize(44, 44)
+        badge.setFixedSize(56, 56)
         on = self._known_power.get(device.did) is True
         badge.setStyleSheet(
             f"QFrame {{ background: {SiColors.THEME if on else SiColors.SURFACE};"
-            f" border-radius: 14px; }}")
+            f" border-radius: 16px; }}")
         bl = QVBoxLayout(badge)
         bl.setContentsMargins(0, 0, 0, 0)
         ic = QLabel()
         ic.setPixmap(qta.icon(
             icon_name,
             color=SiColors.ON_THEME_TEXT if on else SiColors.TEXT_SECONDARY,
-        ).pixmap(22, 22))
+        ).pixmap(26, 26))
         ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bl.addWidget(ic)
         lay.addWidget(badge)
