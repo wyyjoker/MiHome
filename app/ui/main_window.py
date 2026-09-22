@@ -469,6 +469,19 @@ class MainWindow(QMainWindow):
         else:
             Toast.info(self, f"执行失败：{error}", 4000)
 
+    def _open_default_room_panel(self) -> None:
+        """启动后自动选中「客厅」或首个有设备的房间。"""
+        if not self._shell_enabled or self._room_panel is None:
+            return
+        rooms = []
+        for d in self._displayed_devices():
+            room = d.room_name or "未分配"
+            if room not in rooms:
+                rooms.append(room)
+        prefer = "客厅" if "客厅" in rooms else (rooms[0] if rooms else None)
+        if prefer:
+            self._on_shell_room_selected(prefer)
+
     def _on_shell_room_selected(self, room_name: str) -> None:
         devices = [
             d for d in self._displayed_devices()
@@ -937,6 +950,8 @@ class MainWindow(QMainWindow):
             self.refresh_weather()
             if not self._weather_timer.isActive():
                 self._weather_timer.start()
+            # 效果图默认展开客厅右栏
+            QTimer.singleShot(400, self._open_default_room_panel)
 
     # ---------- 设备图标 ----------
 

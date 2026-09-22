@@ -105,16 +105,22 @@ class _SoftCover(QWidget):
             if self._src is None:
                 self._src = _load_asset(self._image_name)
             if self._src is not None:
+                # 放大裁切到「摄影感」：略放大后居中，减少留白
+                target = self.rect().size() * 1.08
                 scaled = self._src.scaled(
-                    self.size(),
+                    target,
                     Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-                # 居中裁切铺满
                 x = (scaled.width() - self.width()) // 2
                 y = (scaled.height() - self.height()) // 2
                 painter.drawPixmap(-max(x, 0), -max(y, 0), scaled)
-                painter.fillRect(self.rect(), QColor(255, 255, 255, 40))
+                # 底部轻渐变压暗，便于叠字
+                grad = QLinearGradient(0, self.height() * 0.45, 0, self.height())
+                grad.setColorAt(0, QColor(43, 42, 38, 0))
+                grad.setColorAt(1, QColor(43, 42, 38, 70))
+                painter.fillRect(self.rect(), QColor(255, 255, 255, 20))
+                painter.fillRect(self.rect(), grad)
                 return
 
         grad = QLinearGradient(0, 0, self.width() * 0.85, self.height())
@@ -225,12 +231,12 @@ class _RoomCard(QFrame):
         ov = QVBoxLayout(overlay)
         ov.setContentsMargins(14, 12, 14, 12)
         ov.addStretch(1)
-        # 封面为浅色渐变，深浅主题都用深字保证可读
+        # 封面为浅色插画，深浅主题都用深字；底部有压暗时仍可读
         cover_fg = "#2B2A26"
         name = QLabel(room.name)
         name.setStyleSheet(
             f"color: {cover_fg}; background: transparent;"
-            f" font-size: 14pt; font-weight: 700;")
+            f" font-size: 13pt; font-weight: 700;")
         ov.addWidget(name)
 
         metric = room.metric_texts(metrics)
@@ -238,7 +244,7 @@ class _RoomCard(QFrame):
         temp = QLabel(temp_line)
         temp.setStyleSheet(
             f"color: {cover_fg}; background: transparent;"
-            f" font-size: 11pt; font-weight: 600;")
+            f" font-size: 10pt; font-weight: 600;")
         ov.addWidget(temp)
         overlay.raise_()
         root.addWidget(cover_host)
@@ -612,20 +618,22 @@ class HomePage(QScrollArea):
         grid_host = QWidget()
         grid = QGridLayout(grid_host)
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(12)
-        cols = 2
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(10)
+        cols = 5
         for i, d in enumerate(devices):
             grid.addWidget(self._build_common_row(d), i // cols, i % cols)
         card.body().addWidget(grid_host)
         return card
 
     def _build_common_row(self, device: DeviceInfo) -> QWidget:
+        """效果图式竖卡：大图标 + 名称/房间 · 状态 + 底部开关。"""
         row = QFrame()
         row.setObjectName("commonDeviceCard")
-        lay = QHBoxLayout(row)
-        lay.setContentsMargins(14, 12, 14, 12)
-        lay.setSpacing(10)
+        row.setFixedWidth(148)
+        lay = QVBoxLayout(row)
+        lay.setContentsMargins(12, 12, 12, 10)
+        lay.setSpacing(6)
 
         kind = classify_device(device)
         icon_name = {
@@ -634,9 +642,10 @@ class HomePage(QScrollArea):
             "curtain": "mdi.blinds",
             "media": "mdi.television",
         }.get(kind, "mdi.devices")
+        state = self._known_power.get(device.did)
+        on = state is True
         badge = QFrame()
         badge.setFixedSize(56, 56)
-        on = self._known_power.get(device.did) is True
         badge.setStyleSheet(
             f"QFrame {{ background: {SiColors.THEME if on else SiColors.SURFACE};"
             f" border-radius: 16px; }}")
@@ -646,23 +655,25 @@ class HomePage(QScrollArea):
         ic.setPixmap(qta.icon(
             icon_name,
             color=SiColors.ON_THEME_TEXT if on else SiColors.TEXT_SECONDARY,
-        ).pixmap(26, 26))
+        ).pixmap(28, 28))
         ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bl.addWidget(ic)
-        lay.addWidget(badge)
+        icon_row = QHBoxLayout()
+        icon_row.addWidget(badge)
+        icon_row.addStretch(1)
+        lay.addLayout(icon_row)
 
-        col = QVBoxLayout()
-        col.setSpacing(2)
         name = QLabel(device.name)
         name.setStyleSheet(
             f"color: {SiColors.TEXT_PRIMARY}; background: transparent;"
-            f" font-size: 11pt; font-weight: 600;")
+            f" font-size: 10pt; font-weight: 600;")
         name.setCursor(Qt.CursorShape.PointingHandCursor)
         name.mousePressEvent = (
             lambda e, did=device.did: self.device_selected.emit(did)
             if e.button() == Qt.MouseButton.LeftButton else None
         )
-        state = self._known_power.get(device.did)
+        lay.addWidget(name)
+
         if not device.online:
             status = "离线"
         elif state is True:
@@ -670,20 +681,20 @@ class HomePage(QScrollArea):
         elif state is False:
             status = "已关闭"
         else:
-            status = "状态未知"
-        sub_text = f"{device.room_name or device.home_name} · {status}"
-        sub = QLabel(sub_text)
+            status = "—"
+        sub = QLabel(f"{device.room_name or device.home_name} · {status}")
         sub.setStyleSheet(
-            f"color: {SiColors.TEXT_MUTED}; background: transparent; font-size: 9pt;")
-        col.addWidget(name)
-        col.addWidget(sub)
-        lay.addLayout(col, 1)
+            f"color: {SiColors.TEXT_MUTED}; background: transparent; font-size: 8pt;")
+        lay.addWidget(sub)
+        lay.addStretch(1)
 
+        foot = QHBoxLayout()
+        foot.addWidget(QLabel())
+        foot.addStretch(1)
         switch = QPushButton()
         switch.setFixedSize(44, 26)
         switch.setCursor(Qt.CursorShape.PointingHandCursor)
         switch.setEnabled(device.online)
-        on = state is True
         switch.setStyleSheet(
             f"QPushButton {{ background: {SiColors.THEME if on else SiColors.STATE_OFF};"
             f" border: none; border-radius: 13px; }}"
@@ -691,8 +702,12 @@ class HomePage(QScrollArea):
             f" {SiColors.THEME_HOVER if on else SiColors.BTN_HOVER}; }}")
         thumb = QLabel(switch)
         thumb.setFixedSize(20, 20)
-        thumb.setStyleSheet(
-            f"background: {SiColors.WHITE}; border-radius: 10px;")
+        thumb.setStyleSheet(f"background: {SiColors.WHITE}; border-radius: 10px;")
+        thumb.move(22 if on else 2, 3)
+        switch.clicked.connect(lambda: self.power_toggled.emit(device.did))
+        foot.addWidget(switch)
+        lay.addLayout(foot)
+        return row
         thumb.move(22 if on else 2, 3)
         switch.clicked.connect(lambda: self.power_toggled.emit(device.did))
         lay.addWidget(switch)
