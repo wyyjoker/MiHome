@@ -98,9 +98,9 @@ def status_chips(
     if lights:
         chips.append(("light", "盏灯亮着", lights))
     if acs:
-        chips.append(("climate", "台空调运行", acs))
+        chips.append(("climate", "台空调已开启", acs))
     if curtains:
-        chips.append(("curtain", "窗帘开启", curtains))
+        chips.append(("curtain", "台窗帘设备已开启", curtains))
     chips.append(("device", "台设备在线", len(online)))
     return chips
 

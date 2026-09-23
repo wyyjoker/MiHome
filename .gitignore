@@ -60,3 +60,5 @@ logs/
 .coverage
 htmlcov/
 .pytest_cache/
+# 离屏界面预览截图
+.tmp/

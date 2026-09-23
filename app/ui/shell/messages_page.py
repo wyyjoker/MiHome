@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# MiHome-Windows: 米家设备的 Windows 桌面控制端
-"""消息页：米家消息中心近 N 小时通知。"""
+"""消息中心：分类列表与真实消息详情。"""
 
 from __future__ import annotations
 
@@ -8,135 +7,200 @@ from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
-
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton,
+                               QScrollArea, QVBoxLayout, QWidget)
 import qtawesome as qta
 
 from app.core.models import MessageInfo
 from app.ui.si_theme import SiColors
 
 
-class MessagesPage(QScrollArea):
+def _clear(layout) -> None:
+    while layout.count():
+        item = layout.takeAt(0)
+        if item.widget():
+            item.widget().deleteLater()
+        elif item.layout():
+            _clear(item.layout())
+
+
+def _text(value: str, size=10, muted=False) -> QLabel:
+    label = QLabel(value)
+    label.setWordWrap(True)
+    label.setFont(QFont("Microsoft YaHei UI", size,
+                        QFont.Weight.Normal if muted else QFont.Weight.DemiBold))
+    label.setStyleSheet(f"color: {SiColors.TEXT_MUTED if muted else SiColors.TEXT_PRIMARY};")
+    return label
+
+
+def _time(message: MessageInfo) -> str:
+    if not message.timestamp:
+        return "时间未知"
+    try:
+        return datetime.fromtimestamp(message.timestamp).strftime("%Y-%m-%d %H:%M")
+    except (ValueError, OSError, OverflowError):
+        return "时间未知"
+
+
+class MessagesPage(QWidget):
     refresh_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWidgetResizable(True)
-        self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-
-        self._host = QWidget()
-        self._host.setObjectName("shellRoot")
-        self._root = QVBoxLayout(self._host)
-        self._root.setContentsMargins(32, 20, 32, 24)
-        self._root.setSpacing(14)
-        self.setWidget(self._host)
-
+        self.setObjectName("shellRoot")
         self._messages: list[MessageInfo] = []
+        self._category = "全部"
+        self._selected_id: str | None = None
+        root = QHBoxLayout(self)
+        root.setContentsMargins(24, 10, 18, 16)
+        root.setSpacing(16)
+        for width, attr in ((None, "_left"), (275, "_right")):
+            scroll = QScrollArea()
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            if width:
+                scroll.setFixedWidth(width)
+                self._right_scroll = scroll
+            host = QWidget()
+            host.setObjectName("shellRoot")
+            layout = QVBoxLayout(host)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(12)
+            setattr(self, attr, layout)
+            scroll.setWidget(host)
+            root.addWidget(scroll, 1 if width is None else 0)
         self._rebuild()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if hasattr(self, "_right_scroll"):
+            self._right_scroll.setVisible(self.width() >= 850)
 
     def set_messages(self, messages: list[MessageInfo]) -> None:
         self._messages = list(messages)
+        if self._selected_id not in {m.msg_id for m in self._messages}:
+            self._selected_id = self._messages[0].msg_id if self._messages else None
         self._rebuild()
 
-    def _clear(self) -> None:
-        while self._root.count():
-            item = self._root.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.deleteLater()
+    def retheme(self) -> None:
+        self._rebuild()
+
+    def _set_category(self, category: str) -> None:
+        self._category = category
+        self._rebuild()
+
+    def _select(self, msg_id: str) -> None:
+        self._selected_id = msg_id
+        self._rebuild()
+        if not self._right_scroll.isVisible():
+            message = next((m for m in self._messages if m.msg_id == msg_id), None)
+            if message is not None:
+                dialog = QMessageBox(self)
+                dialog.setWindowTitle(message.title or "消息")
+                dialog.setTextFormat(Qt.TextFormat.PlainText)
+                dialog.setText(message.body.strip() or "此消息没有正文。")
+                dialog.exec()
 
     def _rebuild(self) -> None:
-        self._clear()
-        header = QHBoxLayout()
-        title = QLabel("消息")
-        title.setFont(QFont("Microsoft YaHei UI", 20, QFont.Weight.DemiBold))
-        title.setStyleSheet(
-            f"color: {SiColors.TEXT_PRIMARY}; background: transparent;")
-        header.addWidget(title)
-        header.addStretch(1)
-        count = QLabel(f"近 24 小时 · {len(self._messages)} 条")
-        count.setStyleSheet(
-            f"color: {SiColors.TEXT_SECONDARY}; background: transparent;")
-        header.addWidget(count)
-        header.addSpacing(12)
-        refresh = QPushButton()
-        refresh.setFixedSize(38, 38)
-        refresh.setCursor(Qt.CursorShape.PointingHandCursor)
-        refresh.setIcon(qta.icon("mdi.refresh", color=SiColors.TEXT_SECONDARY))
-        refresh.setStyleSheet(
-            f"QPushButton {{ background: {SiColors.CARD}; border: 1px solid {SiColors.LINE};"
-            f" border-radius: 12px; }}"
-            f"QPushButton:hover {{ background: {SiColors.CARD_HOVER}; }}")
+        _clear(self._left)
+        _clear(self._right)
+        categories = ["全部"] + sorted({m.category for m in self._messages if m.category})
+        if self._category not in categories:
+            self._category = "全部"
+        head = QHBoxLayout()
+        head.addWidget(_text("消息通知", 15))
+        head.addStretch()
+        head.addWidget(_text(f"近 24 小时 · {len(self._messages)} 条", 9, True))
+        refresh = QPushButton("刷新")
+        refresh.setObjectName("shellNeutralButton")
         refresh.clicked.connect(self.refresh_requested.emit)
-        header.addWidget(refresh)
-        host = QWidget()
-        host.setLayout(header)
-        self._root.addWidget(host)
+        head.addWidget(refresh)
+        self._left.addLayout(head)
+        chips = QHBoxLayout()
+        for category in categories:
+            count = len(self._messages) if category == "全部" else sum(
+                m.category == category for m in self._messages)
+            button = QPushButton(f"{category}  {count}")
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            chosen = category == self._category
+            button.setStyleSheet(
+                f"QPushButton {{ background: {SiColors.THEME if chosen else SiColors.CARD};"
+                f" color: {SiColors.ON_THEME_TEXT if chosen else SiColors.TEXT_PRIMARY};"
+                " border: none; border-radius: 14px; padding: 7px 12px; }}")
+            button.clicked.connect(lambda _=False, c=category: self._set_category(c))
+            chips.addWidget(button)
+        chips.addStretch()
+        self._left.addLayout(chips)
+        filtered = [m for m in self._messages
+                    if self._category == "全部" or m.category == self._category]
+        if filtered:
+            for message in filtered:
+                self._left.addWidget(self._row(message))
+        else:
+            empty = QFrame()
+            empty.setObjectName("homeSectionCard")
+            empty.setMinimumHeight(260)
+            lay = QVBoxLayout(empty)
+            lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon = QLabel()
+            icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon.setPixmap(qta.icon("mdi.bell-outline", color=SiColors.THEME).pixmap(32, 32))
+            lay.addWidget(icon)
+            line = _text("暂无消息")
+            line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lay.addWidget(line)
+            line = _text("设备告警与通知会出现在这里", 9, True)
+            line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lay.addWidget(line)
+            self._left.addWidget(empty)
+        self._left.addStretch()
+        selected = next((m for m in self._messages if m.msg_id == self._selected_id), None)
+        self._right.addWidget(self._detail(selected))
+        self._right.addStretch()
 
-        if not self._messages:
-            empty = QLabel("暂无新消息\n设备告警与通知会出现在这里")
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty.setStyleSheet(
-                f"color: {SiColors.TEXT_SECONDARY}; background: transparent; font-size: 11pt;")
-            empty.setWordWrap(True)
-            wrap = QWidget()
-            wl = QVBoxLayout(wrap)
-            wl.addStretch(1)
-            wl.addWidget(empty)
-            wl.addStretch(1)
-            wrap.setMinimumHeight(260)
-            self._root.addWidget(wrap)
-            return
-
-        for msg in self._messages[:50]:
-            self._root.addWidget(self._row(msg))
-        self._root.addStretch(1)
-
-    def _row(self, msg: MessageInfo) -> QWidget:
+    def _row(self, message: MessageInfo) -> QWidget:
         card = QFrame()
-        card.setObjectName("commonDeviceCard")
+        card.setObjectName("homeSectionCard")
+        if message.msg_id == self._selected_id:
+            card.setStyleSheet(f"QFrame#homeSectionCard {{ border: 2px solid {SiColors.THEME};"
+                               " border-radius: 14px; }}")
         lay = QHBoxLayout(card)
         lay.setContentsMargins(14, 12, 14, 12)
-        lay.setSpacing(12)
-        badge = QFrame()
-        badge.setFixedSize(40, 40)
-        badge.setStyleSheet(
-            f"QFrame {{ background: {SiColors.SURFACE}; border-radius: 12px; }}")
-        bl = QVBoxLayout(badge)
-        bl.setContentsMargins(0, 0, 0, 0)
-        ic = QLabel()
-        ic.setPixmap(qta.icon("mdi.bell-outline", color=SiColors.THEME).pixmap(20, 20))
-        ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        bl.addWidget(ic)
-        lay.addWidget(badge)
-
+        icon = QLabel()
+        icon.setPixmap(qta.icon("mdi.bell-outline", color=SiColors.THEME).pixmap(24, 24))
+        lay.addWidget(icon)
         col = QVBoxLayout()
-        col.setSpacing(2)
-        t = QLabel(msg.title)
-        t.setStyleSheet(
-            f"color: {SiColors.TEXT_PRIMARY}; background: transparent;"
-            f" font-size: 11pt; font-weight: 600;")
-        body = msg.body.strip()
-        sub_parts = []
-        if body:
-            sub_parts.append(body[:80])
-        if msg.timestamp:
-            when = datetime.fromtimestamp(msg.timestamp)
-            sub_parts.append(when.strftime("%m-%d %H:%M"))
-        sub = QLabel("  ·  ".join(sub_parts) if sub_parts else "—")
-        sub.setStyleSheet(
-            f"color: {SiColors.TEXT_MUTED}; background: transparent; font-size: 9pt;")
-        sub.setWordWrap(True)
-        col.addWidget(t)
-        col.addWidget(sub)
+        col.addWidget(_text(message.title or "通知", 11))
+        if message.body.strip():
+            preview = message.body.strip().replace("\n", " ")[:100]
+            col.addWidget(_text(preview, 9, True))
+        col.addWidget(_text(_time(message), 8, True))
         lay.addLayout(col, 1)
+        button = QPushButton("查看")
+        button.setObjectName("shellNeutralButton")
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.clicked.connect(lambda: self._select(message.msg_id))
+        lay.addWidget(button)
+        return card
+
+    def _detail(self, message: MessageInfo | None) -> QWidget:
+        card = QFrame()
+        card.setObjectName("homeSectionCard")
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(16, 18, 16, 18)
+        lay.setSpacing(12)
+        lay.addWidget(_text("消息详情", 13))
+        if message is None:
+            lay.addWidget(_text("选择一条消息查看内容。", 9, True))
+            return card
+        lay.addWidget(_text(message.title or "通知", 13))
+        lay.addWidget(_text(_time(message), 9, True))
+        if message.category:
+            lay.addWidget(_text(f"分类：{message.category}", 9, True))
+        lay.addWidget(_text(message.body.strip() or "此消息没有正文。", 10,
+                            not bool(message.body.strip())))
+        lay.addSpacing(10)
+        lay.addWidget(_text("关联设备", 10))
+        lay.addWidget(_text("当前消息接口未提供关联设备标识。", 9, True))
         return card

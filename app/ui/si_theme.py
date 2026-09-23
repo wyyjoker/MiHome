@@ -448,6 +448,26 @@ QWidget#shellRoot {
     background: $WINDOW_BG;
 }
 
+QPushButton#shellNeutralButton {
+    background: $CARD;
+    color: $TEXT_PRIMARY;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 9px;
+    padding: 6px 12px;
+}
+
+QPushButton#shellNeutralButton:hover {
+    background: $CARD_HOVER;
+}
+
+QLineEdit#shellSearchField {
+    background: $CARD;
+    color: $TEXT_PRIMARY;
+    border: 1px solid $CHIP_BORDER;
+    border-radius: 10px;
+    padding: 6px 12px;
+}
+
 QFrame#navSidebar {
     background: $NAV_BG;
     border-right: 1px solid $LINE;

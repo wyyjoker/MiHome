@@ -2,6 +2,8 @@
 """浅色/深色主题回归测试（离屏运行）。"""
 import os
 import sys
+import tempfile
+from pathlib import Path
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
@@ -15,7 +17,11 @@ app = QApplication([])
 from app.core import cache as _device_cache
 _device_cache.save = lambda *a, **k: None
 
-from app.core import settings_store, tray_store
+from app.core import _json_store, settings_store, tray_store
+# 测试期把设置/托盘文件重定向到临时目录，绝不改动用户配置。
+_test_data = tempfile.TemporaryDirectory(prefix="mihome-theme-test-")
+_real_data_file = _json_store.data_file
+_json_store.data_file = lambda filename: Path(_test_data.name) / filename
 from app.core.models import DeviceInfo
 from app.core.service import MijiaService
 from app.core.jobs import JobExecutor
@@ -152,8 +158,11 @@ if win._tray is not None:
 print("7. 托盘整窗重建 + 自动恢复显示 OK")
 
 win._all_devices = []  # 关闭路径不保存假设备
+win._force_quit = True  # 测试必须真正关闭，不能被托盘策略拦截为隐藏
 win.close()
 jobs.shutdown()
 settings_store.set_theme_mode("system")
 tray_store.save([])
+_json_store.data_file = _real_data_file
+_test_data.cleanup()
 print("THEME REGRESSION ALL PASS")

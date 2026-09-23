@@ -51,13 +51,13 @@ _KIND_BADGE = {
 }
 
 _ROOM_IMAGE = {
-    "客厅": "room-living.png",
-    "主卧": "room-master.png",
-    "书房": "room-study.png",
-    "次卧": "room-second.png",
-    "厨房": "room-default.png",
-    "阳台": "room-default.png",
-    "未分配": "room-default.png",
+    "客厅": "room-photo-living.png",
+    "主卧": "room-photo-bedroom.png",
+    "书房": "room-photo-study.png",
+    "次卧": "room-photo-bedroom.png",
+    "厨房": "room-photo-living.png",
+    "阳台": "room-photo-living.png",
+    "未分配": "room-photo-study.png",
 }
 
 
@@ -132,6 +132,35 @@ class _SoftCover(QWidget):
         painter.setBrush(QColor(255, 255, 255, 40))
         r = int(self.height() * 0.55)
         painter.drawEllipse(self.width() - r - 12, -r // 3, r, r)
+
+
+class _HomeHero(QFrame):
+    """首页宽幅摄影横幅，文字由布局覆盖在背景上。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumHeight(190)
+        self._pix = _load_asset("room-photo-living.png")
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(self.rect(), 17, 17)
+        painter.setClipPath(path)
+        if self._pix is not None:
+            scaled = self._pix.scaled(
+                self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation)
+            painter.drawPixmap((self.width() - scaled.width()) // 2,
+                               (self.height() - scaled.height()) // 2, scaled)
+        else:
+            painter.fillRect(self.rect(), QColor(SiColors.BANNER_B))
+        shade = QLinearGradient(0, 0, self.width(), 0)
+        shade.setColorAt(0, QColor(24, 23, 20, 175))
+        shade.setColorAt(0.64, QColor(24, 23, 20, 35))
+        shade.setColorAt(1, QColor(24, 23, 20, 0))
+        painter.fillRect(self.rect(), shade)
 
 
 class _SectionCard(QFrame):
@@ -339,24 +368,6 @@ class _AttentionRow(QFrame):
             f"QPushButton:hover {{ color: {SiColors.THEME_HOVER}; }}")
         btn.clicked.connect(lambda: self.open_device.emit(item.did))
         lay.addWidget(btn)
-        col = QVBoxLayout()
-        col.setSpacing(2)
-        t = QLabel(item.title)
-        t.setStyleSheet(f"color: {SiColors.TEXT_PRIMARY}; background: transparent; font-weight: 600;")
-        d = QLabel(item.detail or ("电量偏低" if item.severity == "battery" else "设备离线"))
-        d.setStyleSheet(
-            f"color: {SiColors.TEXT_MUTED}; background: transparent; font-size: 9pt;")
-        col.addWidget(t)
-        col.addWidget(d)
-        lay.addLayout(col, 1)
-        btn = QPushButton("查看")
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; border: none;"
-            f" color: {SiColors.THEME}; font-weight: 600; }}"
-            f"QPushButton:hover {{ color: {SiColors.THEME_HOVER}; }}")
-        btn.clicked.connect(lambda: self.open_device.emit(item.did))
-        lay.addWidget(btn)
 
 
 class HomePage(QScrollArea):
@@ -385,21 +396,31 @@ class HomePage(QScrollArea):
         self._metrics: dict[str, str | None] = {}
         self._display_name = "你好"
         self._tray_dids: list[str] = []
+        self._room_columns = 4
+        self._common_columns = 5
         self._consumables: list = []
         self._weather: object | None = None
 
     def set_display_name(self, name: str) -> None:
         self._display_name = name or "你好"
 
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if not hasattr(self, "_room_columns"):
+            return
+        width = self.viewport().width()
+        rooms = 1 if width < 440 else 2 if width < 800 else 4
+        common = 2 if width < 620 else 3 if width < 950 else 5
+        if (rooms, common) != (self._room_columns, self._common_columns):
+            self._room_columns, self._common_columns = rooms, common
+            self._rebuild()
+
     def set_weather(self, snapshot) -> None:
         """WeatherSnapshot 或 None。"""
         self._weather = snapshot
-        # 仅刷新顶栏，避免整页重建闪烁
+        # 天气变化频率低，重建页面即可保持摘要一致。
         if self._root.count() > 0:
-            header = self._root.itemAt(0).widget()
-            if header is not None:
-                # 重建整个页最简单且频率低（约 15 分钟一次）
-                self._rebuild()
+            self._rebuild()
 
     def update_data(
         self,
@@ -425,10 +446,10 @@ class HomePage(QScrollArea):
 
     def _rebuild(self) -> None:
         self._clear()
-        self._root.addWidget(self._build_header())
 
         chips = status_chips(self._devices, self._known_power)
-        self._root.addWidget(self._build_banner(chips))
+        self._root.addWidget(self._build_banner())
+        self._root.addWidget(self._build_chips(chips))
 
         attention = build_attention(
             self._devices, self._known_power, consumables=self._consumables)
@@ -456,7 +477,7 @@ class HomePage(QScrollArea):
         col.setSpacing(8)
         cover = _SoftCover(
             (SiColors.BANNER_A, SiColors.BANNER_B),
-            image_name="room-default.png",
+            image_name="room-photo-study.png",
             height=120, radius=16)
         col.addWidget(cover)
         tip = QLabel("暂无设备数据\n刷新后将显示房间与常用设备")
@@ -519,27 +540,22 @@ class HomePage(QScrollArea):
         host.setLayout(row)
         return host
 
-    def _build_banner(self, chips: list[tuple[str, str, int]] | None = None) -> QWidget:
-        card = QFrame()
-        card.setObjectName("homeBanner")
+    def _build_banner(self) -> QWidget:
+        card = _HomeHero()
         lay = QVBoxLayout(card)
-        lay.setContentsMargins(20, 16, 14, 14)
-        lay.setSpacing(10)
-
-        top = QHBoxLayout()
-        top.setSpacing(14)
-        col = QVBoxLayout()
-        col.setSpacing(4)
+        lay.setContentsMargins(26, 24, 20, 22)
+        lay.setSpacing(8)
         hello = f"{greeting_text()}，{self._display_name}"
         title = QLabel(hello)
         title.setObjectName("greetingTitle")
         title.setFont(QFont("Microsoft YaHei UI", 20, QFont.Weight.DemiBold))
-        col.addWidget(title)
+        title.setStyleSheet("color: white; background: transparent;")
+        lay.addWidget(title)
 
         online = sum(1 for d in self._devices if d.online)
         offline = len(self._devices) - online
         if not self._devices:
-            sub_text = "正在同步家庭设备…"
+            sub_text = "暂无设备数据，请刷新设备列表"
         elif offline:
             sub_text = f"有 {offline} 台设备离线，{online} 台在线"
         else:
@@ -547,25 +563,9 @@ class HomePage(QScrollArea):
         sub = QLabel(sub_text)
         sub.setObjectName("greetingSub")
         sub.setFont(QFont("Microsoft YaHei UI", 11))
-        col.addWidget(sub)
-        col.addStretch(1)
-        top.addLayout(col, 1)
-
-        cover = _SoftCover(
-            (SiColors.BANNER_A, SiColors.BANNER_B),
-            image_name="banner-home.png",
-            height=96, radius=16)
-        cover.setFixedWidth(180)
-        top.addWidget(cover)
-        lay.addLayout(top)
-
-        if chips:
-            chip_row = QHBoxLayout()
-            chip_row.setSpacing(8)
-            for key, label, count in chips:
-                chip_row.addWidget(_StatusChip(key, label, count))
-            chip_row.addStretch(1)
-            lay.addLayout(chip_row)
+        sub.setStyleSheet("color: white; background: transparent;")
+        lay.addWidget(sub)
+        lay.addStretch(1)
         return card
 
     def _build_chips(self, chips: list[tuple[str, str, int]]) -> QWidget:
@@ -599,7 +599,7 @@ class HomePage(QScrollArea):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
-        cols = 4
+        cols = self._room_columns
         for i, room in enumerate(rooms):
             rc = _RoomCard(room, self._metrics, self._known_power)
             rc.clicked.connect(self.room_selected.emit)
@@ -620,7 +620,7 @@ class HomePage(QScrollArea):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(10)
-        cols = 5
+        cols = self._common_columns
         for i, d in enumerate(devices):
             grid.addWidget(self._build_common_row(d), i // cols, i % cols)
         card.body().addWidget(grid_host)
@@ -677,11 +677,11 @@ class HomePage(QScrollArea):
         if not device.online:
             status = "离线"
         elif state is True:
-            status = {"light": "已点亮", "climate": "制冷中", "curtain": "已打开"}.get(kind, "运行中")
+            status = "已开启"
         elif state is False:
             status = "已关闭"
         else:
-            status = "—"
+            status = "在线"
         sub = QLabel(f"{device.room_name or device.home_name} · {status}")
         sub.setStyleSheet(
             f"color: {SiColors.TEXT_MUTED}; background: transparent; font-size: 8pt;")
@@ -691,24 +691,26 @@ class HomePage(QScrollArea):
         foot = QHBoxLayout()
         foot.addWidget(QLabel())
         foot.addStretch(1)
-        switch = QPushButton()
-        switch.setFixedSize(44, 26)
-        switch.setCursor(Qt.CursorShape.PointingHandCursor)
-        switch.setEnabled(device.online)
-        switch.setStyleSheet(
-            f"QPushButton {{ background: {SiColors.THEME if on else SiColors.STATE_OFF};"
-            f" border: none; border-radius: 13px; }}"
-            f"QPushButton:hover {{ background:"
-            f" {SiColors.THEME_HOVER if on else SiColors.BTN_HOVER}; }}")
-        thumb = QLabel(switch)
-        thumb.setFixedSize(20, 20)
-        thumb.setStyleSheet(f"background: {SiColors.WHITE}; border-radius: 10px;")
-        thumb.move(22 if on else 2, 3)
-        switch.clicked.connect(lambda: self.power_toggled.emit(device.did))
-        foot.addWidget(switch)
+        if device.online and state is not None:
+            switch = QPushButton()
+            switch.setFixedSize(44, 26)
+            switch.setCursor(Qt.CursorShape.PointingHandCursor)
+            switch.setStyleSheet(
+                f"QPushButton {{ background: {SiColors.THEME if on else SiColors.STATE_OFF};"
+                f" border: none; border-radius: 13px; }}"
+                f"QPushButton:hover {{ background:"
+                f" {SiColors.THEME_HOVER if on else SiColors.BTN_HOVER}; }}")
+            thumb = QLabel(switch)
+            thumb.setFixedSize(20, 20)
+            thumb.setStyleSheet(f"background: {SiColors.WHITE}; border-radius: 10px;")
+            thumb.move(22 if on else 2, 3)
+            switch.clicked.connect(lambda: self.power_toggled.emit(device.did))
+            foot.addWidget(switch)
+        else:
+            detail = QPushButton("详情")
+            detail.setCursor(Qt.CursorShape.PointingHandCursor)
+            detail.setStyleSheet(f"color: {SiColors.THEME}; background: transparent; border: none;")
+            detail.clicked.connect(lambda: self.device_selected.emit(device.did))
+            foot.addWidget(detail)
         lay.addLayout(foot)
-        return row
-        thumb.move(22 if on else 2, 3)
-        switch.clicked.connect(lambda: self.power_toggled.emit(device.did))
-        lay.addWidget(switch)
         return row

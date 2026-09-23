@@ -65,13 +65,6 @@ class RoomPanel(QFrame):
     open_scenes_requested = Signal()
     prop_write_requested = Signal(str, str, object)  # did, prop_name, value
 
-    _ROOM_IMAGE = {
-        "客厅": "room-living.png",
-        "主卧": "room-master.png",
-        "书房": "room-study.png",
-        "次卧": "room-second.png",
-    }
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("rightPanel")
@@ -162,6 +155,7 @@ class RoomPanel(QFrame):
     def _rebuild(self) -> None:
         self._clear_body()
         self._body_lay.addWidget(self._room_banner())
+        self._body_lay.addWidget(self._environment_card())
 
         groups: dict[str, list[DeviceInfo]] = {}
         for d in self._devices:
@@ -187,6 +181,25 @@ class RoomPanel(QFrame):
 
         self._body_lay.addStretch(1)
 
+    def _environment_card(self) -> QWidget:
+        from app.ui.shell.rooms_page import _metric_pair
+        temp, humidity = _metric_pair(self._devices, self._metrics)
+        card = QFrame()
+        card.setObjectName("homeSectionCard")
+        lay = QHBoxLayout(card)
+        lay.setContentsMargins(14, 13, 14, 13)
+        for title, value in (("室内温度", temp), ("室内湿度", humidity)):
+            col = QVBoxLayout()
+            name = QLabel(title)
+            name.setStyleSheet(f"color: {SiColors.TEXT_MUTED}; font-size: 8pt;")
+            number = QLabel(value)
+            number.setStyleSheet(
+                f"color: {SiColors.TEXT_PRIMARY}; font-size: 14pt; font-weight: 600;")
+            col.addWidget(name)
+            col.addWidget(number)
+            lay.addLayout(col, 1)
+        return card
+
     def _room_banner(self) -> QWidget:
         from app.ui.shell.home_page import _SoftCover, _ROOM_COVER, _ROOM_IMAGE
         host = QWidget()
@@ -194,7 +207,7 @@ class RoomPanel(QFrame):
         lay.setContentsMargins(0, 0, 0, 4)
         cover = _SoftCover(
             _ROOM_COVER.get(self._room_name, _ROOM_COVER["未分配"]),
-            image_name=_ROOM_IMAGE.get(self._room_name, "room-default.png"),
+            image_name=_ROOM_IMAGE.get(self._room_name, "room-photo-living.png"),
             height=160, radius=18)
         lay.addWidget(cover)
         online = sum(1 for d in self._devices if d.online)
@@ -218,9 +231,11 @@ class RoomPanel(QFrame):
         row.addWidget(text)
         row.addStretch(1)
         if bulk:
-            light_dids = [d.did for d in items if d.online]
+            light_dids = [d.did for d in items
+                          if d.online and self._known_power.get(d.did) is not None]
             for title, turn_on in (("全开", True), ("全关", False)):
                 btn = QPushButton(title)
+                btn.setEnabled(bool(light_dids))
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.setStyleSheet(
                     f"QPushButton {{ background: {SiColors.SURFACE}; border: none;"
@@ -266,22 +281,18 @@ class RoomPanel(QFrame):
             m = QLabel(meta)
             m.setStyleSheet(f"color: {SiColors.TEXT_MUTED}; background: transparent;")
             lay.addWidget(m)
-        power = QPushButton()
-        power.setFixedSize(32, 32)
-        power.setEnabled(device.online)
-        power.setCursor(Qt.CursorShape.PointingHandCursor)
         state = self._known_power.get(device.did)
-        icon = "mdi.power" if state else "mdi.power-off"
-        color = (
-            SiColors.THEME if state
-            else (SiColors.ICON_DIM if device.online else SiColors.ICON_MUTED)
-        )
-        power.setIcon(qta.icon(icon, color=color))
-        power.setStyleSheet(
-            f"QPushButton {{ background: {SiColors.SURFACE}; border: none; border-radius: 16px; }}"
-            f"QPushButton:hover {{ background: {SiColors.BTN_HOVER}; }}")
-        power.clicked.connect(lambda: self.power_toggled.emit(device.did))
-        lay.addWidget(power)
+        if device.online and state is not None:
+            power = QPushButton()
+            power.setFixedSize(32, 32)
+            power.setCursor(Qt.CursorShape.PointingHandCursor)
+            icon = "mdi.power" if state else "mdi.power-off"
+            power.setIcon(qta.icon(icon, color=SiColors.THEME if state else SiColors.ICON_DIM))
+            power.setStyleSheet(
+                f"QPushButton {{ background: {SiColors.SURFACE}; border: none; border-radius: 16px; }}"
+                f"QPushButton:hover {{ background: {SiColors.BTN_HOVER}; }}")
+            power.clicked.connect(lambda: self.power_toggled.emit(device.did))
+            lay.addWidget(power)
         return card
 
     def _climate_card(self, device: DeviceInfo) -> QWidget:
@@ -299,8 +310,9 @@ class RoomPanel(QFrame):
         name.setStyleSheet(
             f"color: {SiColors.TEXT_PRIMARY}; background: transparent;")
         name_col.addWidget(name)
-        on = self._known_power.get(device.did) is True
-        running = QLabel("●  运行中" if on else "○  已关闭")
+        state = self._known_power.get(device.did)
+        on = state is True
+        running = QLabel("●  已开启" if on else "○  已关闭" if state is False else "开关状态未获取")
         running.setStyleSheet(
             f"color: {SiColors.THEME if on else SiColors.TEXT_MUTED};"
             f" background: transparent; font-size: 9pt;")
@@ -419,6 +431,9 @@ class RoomPanel(QFrame):
         tprop = self._find_prop(detail, ("target-temperature", "target_temperature"))
         if tprop is not None and tprop.range:
             tmin, tmax, step = tprop.range
+        can_adjust = target is not None and tprop is not None and tprop.writable
+        minus.setEnabled(can_adjust)
+        plus.setEnabled(can_adjust)
 
         def _bump(delta: float) -> None:
             if target is None or tprop is None:
@@ -430,14 +445,17 @@ class RoomPanel(QFrame):
         plus.clicked.connect(lambda: _bump(step))
 
         power_btn = QPushButton(
-            "关闭空调" if on else "开启空调")
+            "关闭空调" if on else "开启空调" if state is False else "在详情中控制")
         power_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         power_btn.setFixedHeight(40)
         power_btn.setStyleSheet(
             f"QPushButton {{ background: {SiColors.SURFACE}; border: 1px solid {SiColors.LINE};"
             f" border-radius: 12px; color: {SiColors.TEXT_PRIMARY}; font-weight: 600; }}"
             f"QPushButton:hover {{ border-color: {SiColors.THEME}; color: {SiColors.THEME}; }}")
-        power_btn.clicked.connect(lambda: self.power_toggled.emit(device.did))
+        if state is None:
+            power_btn.clicked.connect(lambda: self.device_selected.emit(device.did))
+        else:
+            power_btn.clicked.connect(lambda: self.power_toggled.emit(device.did))
         lay.addWidget(power_btn)
         return card
 

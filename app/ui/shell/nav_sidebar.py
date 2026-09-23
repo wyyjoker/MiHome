@@ -28,9 +28,6 @@ _NAV_ITEMS = (
     ("rooms", "mdi.floor-plan", "房间"),
     ("devices", "mdi.devices", "设备"),
     ("scenes", "mdi.palette-swatch", "场景"),
-    ("automation", "mdi.robot", "自动化"),
-    ("security", "mdi.shield-home", "安防"),
-    ("energy", "mdi.flash", "能耗"),
     ("messages", "mdi.message-text", "消息"),
 )
 
@@ -135,7 +132,7 @@ class NavSidebar(QFrame):
         self._user_name.setStyleSheet(
             f"color: {SiColors.TEXT_PRIMARY}; background: transparent;"
             f" font-weight: 600;")
-        self._user_role = QLabel("家庭管理员")
+        self._user_role = QLabel("智能家居")
         self._user_role.setStyleSheet(
             f"color: {SiColors.TEXT_MUTED}; background: transparent; font-size: 8pt;")
         col.addWidget(self._user_name)

@@ -46,7 +46,9 @@ from app.ui.device_card import DeviceCard
 from app.ui.device_dialog import DeviceDetailDialog
 from app.ui.si_theme import SiColors, themed_tab_button
 from app.ui.shell.home_page import HomePage
+from app.ui.shell.devices_page import DevicesPage
 from app.ui.shell.nav_sidebar import NavSidebar
+from app.ui.shell.page_header import PageHeader
 from app.ui.shell.placeholder_page import PlaceholderPage
 from app.ui.shell.room_panel import RoomPanel
 from app.ui.shell.rooms_page import RoomsPage
@@ -142,15 +144,18 @@ class MainWindow(QMainWindow):
         self._shell_enabled = get_home_shell_enabled()
         self._shell_route = "home"
         self._nav: NavSidebar | None = None
+        self._shell_header: PageHeader | None = None
         self._content_stack = None
         self._home_page: HomePage | None = None
         self._rooms_page: RoomsPage | None = None
+        self._devices_page: DevicesPage | None = None
         self._room_panel: RoomPanel | None = None
         self._placeholder_pages: dict[str, QWidget] = {}
         self._shell_busy_power: set[str] = set()
         self._scenes_page = None
         self._scenes_loaded = False
         self._messages_page = None
+        self._message_count = 0
         self._consumables: list = []
         self._weather = None
         self._weather_timer = QTimer(self)
@@ -328,10 +333,18 @@ class MainWindow(QMainWindow):
         self._content_stack.addWidget(self._home_page)
 
         self._rooms_page = RoomsPage()
-        self._rooms_page.room_selected.connect(self._on_shell_room_selected)
+        self._rooms_page.device_selected.connect(self._on_shell_device_selected)
+        self._rooms_page.power_toggled.connect(self._on_shell_power_toggled)
+        self._rooms_page.power_many_requested.connect(self._on_shell_power_many)
+        self._rooms_page.open_scenes_requested.connect(
+            lambda: self._on_shell_navigate("scenes"))
         self._content_stack.addWidget(self._rooms_page)
 
-        self._content_stack.addWidget(devices_host)
+        self._devices_page = DevicesPage()
+        self._devices_page.power_toggled.connect(self._on_shell_power_toggled)
+        self._devices_page.open_detail_requested.connect(self._on_open_device)
+        self._devices_page.refresh_requested.connect(self.load_devices)
+        self._content_stack.addWidget(self._devices_page)
 
         from app.ui.shell.scenes_page import ScenesPage
         self._scenes_page = ScenesPage()
@@ -348,8 +361,21 @@ class MainWindow(QMainWindow):
         self._messages_page = MessagesPage()
         self._messages_page.refresh_requested.connect(self.load_messages)
         self._content_stack.addWidget(self._messages_page)
+        # 旧设备网格仍供开关轮询、托盘与设置回归复用，保留所有权但不导航到它。
+        self._content_stack.addWidget(devices_host)
 
-        body.addWidget(self._content_stack, stretch=1)
+        content_col = QVBoxLayout()
+        content_col.setContentsMargins(0, 0, 0, 0)
+        content_col.setSpacing(0)
+        self._shell_header = PageHeader()
+        self._shell_header.notifications_requested.connect(
+            lambda: self._on_shell_navigate("messages"))
+        self._shell_header.home_requested.connect(self._show_home_menu)
+        content_col.addWidget(self._shell_header)
+        content_row = QHBoxLayout()
+        content_row.setContentsMargins(0, 0, 0, 0)
+        content_row.setSpacing(0)
+        content_row.addWidget(self._content_stack, stretch=1)
 
         self._room_panel = RoomPanel()
         self._room_panel.device_selected.connect(self._on_open_device)
@@ -358,7 +384,9 @@ class MainWindow(QMainWindow):
         self._room_panel.open_scenes_requested.connect(lambda: self._on_shell_navigate("scenes"))
         self._room_panel.prop_write_requested.connect(self._on_shell_prop_write)
         self._room_panel.hide()
-        body.addWidget(self._room_panel)
+        content_row.addWidget(self._room_panel)
+        content_col.addLayout(content_row, stretch=1)
+        body.addLayout(content_col, stretch=1)
 
         root.addLayout(body)
         self._shell_route = "home"
@@ -370,6 +398,8 @@ class MainWindow(QMainWindow):
             self._nav.set_current(self._shell_route)
             return
         self._shell_route = key
+        if self._shell_header is not None:
+            self._shell_header.set_page(key)
         order = ["home", "rooms", "devices", "scenes", "automation", "security", "energy", "messages"]
         if key in order:
             self._content_stack.setCurrentIndex(order.index(key))
@@ -378,10 +408,15 @@ class MainWindow(QMainWindow):
             self.load_scenes()
         if key == "messages":
             self.load_messages()
-        if key != "rooms" and key != "home":
-            # 离开首页/房间时收起右栏，避免遮挡
+        if key != "home":
+            # 房间页已有自己的详情栏；其余页面也不复用首页房间面板。
             if self._room_panel is not None:
                 self._room_panel.hide()
+
+    def _on_shell_device_selected(self, did: str) -> None:
+        self._on_shell_navigate("devices")
+        if self._devices_page is not None:
+            self._devices_page.select_device(did)
 
     def load_messages(self) -> None:
         self._jobs.submit(
@@ -394,10 +429,12 @@ class MainWindow(QMainWindow):
         )
 
     def _on_messages_loaded(self, messages) -> None:
+        self._message_count = len(messages)
         if self._messages_page is not None:
             self._messages_page.set_messages(messages)
         if self._nav is not None:
-            self._nav.set_message_count(len(messages))
+            self._nav.set_message_count(self._message_count)
+        self._refresh_shell_header()
 
     def load_consumables(self) -> None:
         self._jobs.submit(
@@ -417,6 +454,7 @@ class MainWindow(QMainWindow):
             self._weather = None
             if self._home_page is not None:
                 self._home_page.set_weather(None)
+            self._refresh_shell_header()
             return
         city = get_weather_city()
 
@@ -434,6 +472,14 @@ class MainWindow(QMainWindow):
         self._weather = snapshot
         if self._home_page is not None:
             self._home_page.set_weather(snapshot)
+        self._refresh_shell_header()
+
+    def _refresh_shell_header(self) -> None:
+        if self._shell_header is None:
+            return
+        from app.core.settings_store import get_display_name
+        self._shell_header.set_context(
+            self._current_home, self._weather, self._message_count, get_display_name())
 
     def load_scenes(self) -> None:
         self._scenes_loaded = True
@@ -606,23 +652,29 @@ class MainWindow(QMainWindow):
             return
         from app.core import tray_store
         from app.core.settings_store import get_display_name
+        shown = [d for d in self._displayed_devices()
+                 if self._current_home == _ALL_HOMES or d.home_name == self._current_home]
         if self._nav is not None:
             self._nav.set_display_name(get_display_name())
-            offline = sum(1 for d in self._displayed_devices() if not d.online)
-            self._nav.set_message_count(offline)
+            self._nav.set_message_count(self._message_count)
+        self._refresh_shell_header()
         if self._home_page is not None:
             self._home_page.set_display_name(get_display_name())
             if self._weather is not None:
                 self._home_page.set_weather(self._weather)
             self._home_page.update_data(
-                self._displayed_devices(),
+                shown,
                 self._known_power,
                 self._metrics,
                 tray_store.load() or [],
                 getattr(self, "_consumables", []),
             )
         if self._rooms_page is not None:
-            self._rooms_page.update_data(self._displayed_devices())
+            self._rooms_page.update_data(
+                shown, self._known_power, self._metrics)
+        if self._devices_page is not None:
+            self._devices_page.update_data(
+                shown, self._known_power, self._metrics)
         if self._room_panel is not None and self._room_panel.isVisible():
             room = self._room_panel._room_name
             devices = [
@@ -663,6 +715,8 @@ class MainWindow(QMainWindow):
     def _on_theme_changed(self, theme: str) -> None:
         """主题切换广播：重建可重建结构并刷新固定件。"""
         self._reapply_chrome_styles()
+        if self._shell_header is not None:
+            self._shell_header.retheme()
         self._rebuild_tabs()
         self._rebuild_grid()
         self._update_count_label()
@@ -676,6 +730,10 @@ class MainWindow(QMainWindow):
         if self._nav is not None:
             self._nav.retheme()
         self._update_shell_panels()
+        if self._scenes_page is not None:
+            self._scenes_page.retheme()
+        if self._messages_page is not None:
+            self._messages_page.retheme()
         # 打开中的设置页自身也刷新（其样式为构造时求值的内联样式）
         dlg = self._settings_dialog
         if dlg is not None and shiboken6.isValid(dlg) and dlg.isVisible():
@@ -713,9 +771,10 @@ class MainWindow(QMainWindow):
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(12, 0, 4, 0)
         lay.setSpacing(6)
-        lay.addWidget(logo)
-        lay.addSpacing(4)
-        lay.addWidget(title)
+        if not self._shell_enabled:
+            lay.addWidget(logo)
+            lay.addSpacing(4)
+            lay.addWidget(title)
         lay.addStretch(1)
         lay.addWidget(min_btn)
         lay.addWidget(self._max_btn)
@@ -1354,8 +1413,8 @@ class MainWindow(QMainWindow):
             action.setCheckable(True)
             action.setChecked(home == self._current_home)
             action.triggered.connect(lambda _, h=home: self._select_home(h))
-        menu.exec(self._home_btn.mapToGlobal(
-            self._home_btn.rect().bottomLeft()))
+        anchor = self._shell_header.home_anchor() if self._shell_header else self._home_btn
+        menu.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
         menu.deleteLater()
 
     def _select_home(self, home: str) -> None:
@@ -1370,6 +1429,7 @@ class MainWindow(QMainWindow):
         self._update_count_label()
         self._refresh_power_states(force=False)
         self._refresh_metrics()
+        self._update_shell_panels()
 
     def _animate_grid_in(self) -> None:
         """切换家庭/房间后卡片网格整体淡入（160ms），结束即移除效果。"""
